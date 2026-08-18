@@ -183,8 +183,9 @@ Tudo é gravado automaticamente, sem botão de salvar, dentro desta pasta:
 ```
 Sistema Financeiro\
 ├─ Análise de aulas - atualizado.xlsx   planilha original (nunca é alterada)
-├─ INICIAR.bat                          abre o sistema
-├─ servidor.js                          servidor local
+├─ INICIAR.bat                          abre o sistema (uso local)
+├─ package.json                         só para hosts na nuvem saberem rodar "npm start"
+├─ servidor.js                          servidor
 ├─ dados\                               >>> SEUS DADOS <<<
 │  ├─ opcoes.json                       listas de seleção (aba Início)
 │  ├─ alunos.json                       cadastro de alunos
@@ -199,6 +200,64 @@ Sistema Financeiro\
 A cada gravação o sistema guarda uma cópia da versão anterior em `dados\backups`
 (mantém as 200 mais recentes). Para voltar atrás, basta copiar o arquivo desejado
 de `backups` por cima do arquivo em `dados`.
+
+---
+
+## Publicar na internet
+
+Este sistema **não roda na Vercel**: ela publica o código como funções sem
+estado, sem disco persistente — os arquivos de `dados\` seriam apagados a cada
+novo deploy e nem sempre uma requisição enxergaria o que outra gravou no
+segundo antes. Como o servidor é justamente feito para gravar tudo em disco
+(e manter as sessões de login em memória), ele precisa de um host que rode um
+processo Node.js de verdade, com um disco que continua ali depois do deploy —
+por exemplo **Railway** ou **Render**.
+
+Passo a passo (usando o Railway como exemplo, já que o código está no GitHub):
+
+1. **Criar o serviço**: no Railway, "New Project" → "Deploy from GitHub repo" →
+   escolher `noveraacademyoficial/SistemaNovera`. Ele detecta o `package.json`
+   e roda `npm start` sozinho.
+2. **Adicionar um Volume** (disco persistente): na aba do serviço, "Volumes" →
+   criar um, com **Mount Path** `/data`. Sem isso, os dados também seriam
+   perdidos a cada deploy, só que aqui no Railway em vez da Vercel.
+3. **Variáveis de ambiente** (aba "Variables"):
+   - `DADOS_DIR` = `/data` — manda o servidor gravar tudo no volume, não na
+     pasta do código (que é recriada a cada deploy).
+   - `ADMIN_USUARIO`, `ADMIN_SENHA` — criam a conta do Davi na primeira vez que
+     o servidor sobe (só funciona se `dados/usuarios.json` ainda não existir
+     nesse volume; depois da primeira vez pode até apagar essas duas variáveis,
+     a conta já foi criada e gravada).
+   - `PROF_USUARIO`, `PROF_SENHA` — mesma ideia, para a conta da Olivia.
+   - `PORT` já vem definida automaticamente pelo Railway — não precisa mexer.
+4. **Deploy**. Nos logs deve aparecer `usuarios.json criado a partir de
+   variaveis de ambiente (2 conta(s))` na primeira subida.
+5. Entrar no site publicado com o usuário/senha que você definiu e conferir o
+   login. Os demais dados (alunos, pagamentos etc.) **não são migrados
+   automaticamente** — como `dados\` nunca vai para o GitHub de propósito
+   (tem informação pessoal dos alunos), o servidor publicado começa vazio.
+   Duas opções: recadastrar aos poucos pela própria tela, ou copiar os arquivos
+   da sua pasta `dados\` local para o volume do Railway (usando `railway ssh`
+   ou o terminal do próprio painel) — se quiser esse segundo caminho, me avise
+   que eu te guio pelos comandos exatos.
+
+**Sobre o plano gratuito**: os créditos de avaliação do Railway não sustentam
+um volume ligado 24 horas por muito tempo; para o sistema ficar sempre no ar
+de forma confiável, o plano pago (bem barato, poucos dólares por mês) é o
+esperado — normal para uma ferramenta que já lida com dado real de pagamento.
+
+**Uma instância só**: o sistema guarda sessão de login em memória e grava
+arquivo com trava simples (não é um banco de dados de verdade). Isso significa
+que só pode rodar **uma cópia** do servidor por vez — nunca ative "múltiplas
+réplicas" nem "auto-scaling" na plataforma escolhida.
+
+**Segurança ao publicar**: com o site agora acessível por qualquer pessoa na
+internet, adicionei uma trava simples contra tentativa repetida de senha (10
+tentativas erradas do mesmo IP em 5 minutos e as próximas são recusadas por um
+tempo) — vale tanto para o login quanto para o formulário de senha do Davi na
+tela da Olivia. Os cookies de sessão também passam a exigir conexão HTTPS
+quando o servidor detecta que está atrás de um proxy com HTTPS (é o caso do
+Railway/Render, que já entregam HTTPS automaticamente).
 
 ---
 

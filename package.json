@@ -1,0 +1,12 @@
+{
+  "name": "sistema-financeiro-novera",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema financeiro e de gestao de aulas da Novera Academy",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node servidor.js"
+  }
+}

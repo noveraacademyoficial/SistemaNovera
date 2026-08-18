@@ -1,12 +1,16 @@
 /**
  * Sistema Financeiro - Novera Academy
- * Servidor local sem dependencias externas (apenas Node.js).
- * Todos os dados sao lidos e gravados em ./dados/*.json
+ * Servidor sem dependencias externas (apenas Node.js).
+ * Todos os dados sao lidos e gravados em arquivos *.json dentro de PASTA_DADOS.
  *
  * Acesso: a separacao entre a gestao financeira e as telas dos professores e
  * feita AQUI, no servidor. O navegador nunca recebe o que o perfil nao pode ver.
- * E um controle de acesso local, para uso na propria maquina — nao substitui
- * as protecoes necessarias caso o sistema seja publicado na internet.
+ *
+ * Publicacao na internet: este servidor precisa de disco persistente e de uma
+ * unica instancia rodando (sessoes ficam em memoria, sem banco de dados) — nao
+ * funciona em plataformas serverless/sem-estado como a Vercel. Em producao,
+ * aponte DADOS_DIR para um volume persistente do host escolhido (ex.: Railway,
+ * Render, Fly.io) e nunca rode mais de uma replica ao mesmo tempo.
  */
 const http = require('http');
 const fs = require('fs');
@@ -14,10 +18,10 @@ const path = require('path');
 const crypto = require('crypto');
 
 const RAIZ = __dirname;
-const PASTA_DADOS = path.join(RAIZ, 'dados');
+const PASTA_DADOS = process.env.DADOS_DIR ? path.resolve(process.env.DADOS_DIR) : path.join(RAIZ, 'dados');
 const PASTA_PUBLICO = path.join(RAIZ, 'publico');
 const PASTA_BACKUP = path.join(PASTA_DADOS, 'backups');
-const PORTA = Number(process.env.PORTA) || 3300;
+const PORTA = Number(process.env.PORT) || Number(process.env.PORTA) || 3300;
 
 const ARQUIVOS = {
   opcoes: 'opcoes.json',
@@ -59,6 +63,36 @@ const TIPOS = {
 
 fs.mkdirSync(PASTA_DADOS, { recursive: true });
 fs.mkdirSync(PASTA_BACKUP, { recursive: true });
+
+/**
+ * dados/usuarios.json nunca vai para o git (tem hash de senha). Num servidor
+ * novo, sem esse arquivo ainda, cria as contas a partir de variaveis de
+ * ambiente — assim dá para publicar sem nunca commitar senha nenhuma, nem em
+ * texto puro nem com hash. So roda se o arquivo NAO existir; nunca sobrescreve
+ * contas que já foram criadas (pelo bootstrap ou por uso normal do sistema).
+ */
+function iniciarUsuarios() {
+  const alvo = path.join(PASTA_DADOS, 'usuarios.json');
+  if (fs.existsSync(alvo)) return;
+
+  const contas = [];
+  const adicionar = (usuario, senha, nome, perfil, professor) => {
+    if (!usuario || !senha) return;
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(senha, salt, 64).toString('hex');
+    contas.push({ usuario: String(usuario).trim().toLowerCase(), nome, perfil, professor, salt, hash });
+  };
+  adicionar(process.env.ADMIN_USUARIO, process.env.ADMIN_SENHA, process.env.ADMIN_NOME || 'Davi', 'admin', process.env.ADMIN_PROFESSOR || process.env.ADMIN_NOME || 'Davi');
+  adicionar(process.env.PROF_USUARIO, process.env.PROF_SENHA, process.env.PROF_NOME || 'Olivia', 'professor', process.env.PROF_PROFESSOR || process.env.PROF_NOME || 'Olivia');
+
+  if (contas.length) {
+    fs.writeFileSync(alvo, JSON.stringify(contas, null, 2), 'utf8');
+    console.log('  usuarios.json criado a partir de variaveis de ambiente (' + contas.length + ' conta(s)).');
+  } else {
+    console.log('  Aviso: dados/usuarios.json nao existe e nenhuma variavel ADMIN_USUARIO/ADMIN_SENHA foi definida — ninguem consegue entrar ainda.');
+  }
+}
+iniciarUsuarios();
 
 /* ------------------------------------------------------------------ dados */
 
@@ -118,6 +152,40 @@ function sessaoDe(req) {
   if (!sessao) return null;
   if (sessao.expira < Date.now()) { sessoes.delete(token); return null; }
   return { token, ...sessao.conta };
+}
+
+/**
+ * Trava simples contra tentativa repetida de senha, por IP: depois de
+ * LIMITE_LOGIN tentativas erradas dentro da JANELA_LOGIN, novas tentativas
+ * são recusadas até a janela expirar. Sem isso, uma vez publicado na
+ * internet, o login e o formulário de senha do Davi ficariam abertos a
+ * tentativa e erro ilimitados.
+ */
+const tentativasLogin = new Map();   // ip -> { contagem, expira }
+const JANELA_LOGIN = 5 * 60 * 1000;
+const LIMITE_LOGIN = 10;
+
+function ipDoPedido(req) {
+  const encaminhado = req.headers['x-forwarded-for'];
+  if (encaminhado) return encaminhado.split(',')[0].trim();
+  return (req.socket && req.socket.remoteAddress) || 'desconhecido';
+}
+function loginBloqueado(ip) {
+  const registro = tentativasLogin.get(ip);
+  if (!registro) return false;
+  if (registro.expira < Date.now()) { tentativasLogin.delete(ip); return false; }
+  return registro.contagem >= LIMITE_LOGIN;
+}
+function registrarTentativaFalha(ip) {
+  const registro = tentativasLogin.get(ip);
+  if (!registro || registro.expira < Date.now()) tentativasLogin.set(ip, { contagem: 1, expira: Date.now() + JANELA_LOGIN });
+  else registro.contagem++;
+}
+function limparTentativas(ip) { tentativasLogin.delete(ip); }
+
+/** Acrescenta "Secure" ao cookie quando a conexão pública é HTTPS (atrás de proxy). */
+function cookieSeguro(req) {
+  return req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
 }
 
 /* --------------------------------------------------- recorte por perfil */
@@ -198,12 +266,15 @@ const servidor = http.createServer(async (req, res) => {
   try {
     /* ---------------- sessao ---------------- */
     if (rota === '/api/entrar' && req.method === 'POST') {
+      const ip = ipDoPedido(req);
+      if (loginBloqueado(ip)) return responderJson(res, 429, { erro: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.' });
       const corpo = await lerCorpo(req) || {};
       const conta = autenticar(corpo.usuario, corpo.senha);
-      if (!conta) return responderJson(res, 401, { erro: 'Usuário ou senha inválidos.' });
+      if (!conta) { registrarTentativaFalha(ip); return responderJson(res, 401, { erro: 'Usuário ou senha inválidos.' }); }
+      limparTentativas(ip);
       const token = criarSessao(conta);
       return responderJson(res, 200, { ok: true, conta }, {
-        'Set-Cookie': `novera_sessao=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${DURACAO_SESSAO / 1000}`,
+        'Set-Cookie': `novera_sessao=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${DURACAO_SESSAO / 1000}${cookieSeguro(req)}`,
       });
     }
 
@@ -211,7 +282,7 @@ const servidor = http.createServer(async (req, res) => {
       const sessao = sessaoDe(req);
       if (sessao) sessoes.delete(sessao.token);
       return responderJson(res, 200, { ok: true }, {
-        'Set-Cookie': 'novera_sessao=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0',
+        'Set-Cookie': `novera_sessao=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${cookieSeguro(req)}`,
       });
     }
 
@@ -249,6 +320,8 @@ const servidor = http.createServer(async (req, res) => {
        * cada chamada, nunca fica "destravada" para as proximas edicoes.
        */
       if (rota === '/api/contagem-aulas' && req.method === 'POST') {
+        const ip = ipDoPedido(req);
+        if (loginBloqueado(ip)) return responderJson(res, 429, { erro: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.' });
         const corpo = await lerCorpo(req) || {};
         const ano = Number(corpo.ano);
         const mes = Number(corpo.mes);
@@ -259,8 +332,10 @@ const servidor = http.createServer(async (req, res) => {
 
         const confirmacao = autenticar(corpo.usuarioConfirmacao, corpo.senhaConfirmacao);
         if (!confirmacao || confirmacao.perfil !== 'admin') {
+          registrarTentativaFalha(ip);
           return responderJson(res, 401, { erro: 'Usuário ou senha do Davi inválidos.' });
         }
+        limparTentativas(ip);
         // quem não é admin só altera a própria contagem, mesmo com a senha do Davi em mãos
         const professorAlvo = ehAdmin(conta) ? (corpo.professor || conta.professor) : conta.professor;
 
@@ -332,11 +407,15 @@ const servidor = http.createServer(async (req, res) => {
   }
 });
 
-servidor.listen(PORTA, '127.0.0.1', () => {
+// Local (sem PORT definido pela plataforma): só a própria máquina acessa.
+// Publicado (Railway/Render definem PORT): precisa escutar em todas as interfaces.
+const HOST = process.env.HOST || (process.env.PORT ? '0.0.0.0' : '127.0.0.1');
+
+servidor.listen(PORTA, HOST, () => {
   console.log('');
   console.log('  Sistema Financeiro | Novera Academy');
   console.log('  ------------------------------------------------');
-  console.log('  Abra no navegador:  http://localhost:' + PORTA);
+  console.log('  Endereco:           ' + HOST + ':' + PORTA);
   console.log('  Dados salvos em:    ' + PASTA_DADOS);
   console.log('  Para encerrar:      Ctrl + C');
   console.log('');

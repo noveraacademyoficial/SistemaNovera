@@ -5,6 +5,10 @@ dados/
 # Planilha original, com os mesmos dados reais dos alunos
 *.xlsx
 
+# Variaveis de ambiente locais (senhas de bootstrap, etc.)
+.env
+.env.local
+
 # Cruft comum de SO/editor
 Thumbs.db
 .DS_Store
