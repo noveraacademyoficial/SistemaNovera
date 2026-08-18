@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/manipulador.js", "use": "@vercel/node" },
+    { "src": "publico/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/manipulador.js" },
+    { "src": "/$", "dest": "/publico/index.html" },
+    { "src": "/(.*)", "dest": "/publico/$1" }
+  ]
+}

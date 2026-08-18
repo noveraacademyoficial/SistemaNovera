@@ -191,9 +191,13 @@ Sistema Financeiro\
 ├─ package.json                         dependências (@supabase/*) e "npm start"
 ├─ carregarEnv.js                       lê o .env local para dentro do processo
 ├─ banco.js                             camada de acesso ao Supabase (único lugar que fala com o banco)
-├─ servidor.js                          servidor HTTP
+├─ servidor.js                          o handler HTTP (usado local e pela função da Vercel)
+├─ vercel.json                          diz pra Vercel onde estão a função e os arquivos estáticos
+├─ api\
+│  └─ manipulador.js                    função da Vercel — só chama o handler de servidor.js
 ├─ deploy\                              scripts de publicação e o schema do banco
 │  ├─ schema.sql                        schema original (Supabase SQL Editor)
+│  ├─ schema-vercel.sql                 tabelas de sessão/login para rodar na Vercel
 │  ├─ schema-correcao-*.sql             correções aplicadas depois (histórico)
 │  └─ migrar-para-supabase.js           script que moveu dados\*.json pro banco
 ├─ dados\                               >>> BACKUP HISTÓRICO, não é mais a fonte ativa <<<
@@ -225,29 +229,33 @@ variável de ambiente do host escolhido.
 
 ## Publicar na internet
 
-**Atualização (18/08/2026): desde a migração para o Supabase, o motivo original
-de não rodar na Vercel (disco apagado a cada deploy) não existe mais** — os
-dados já vivem num banco de verdade, acessível de qualquer host. O que ainda
-prende o servidor a uma única instância sempre ligada é o que continua em
-memória do processo: a sessão de login (`sessoes`) e a trava de tentativas de
-senha (`tentativasLogin`), em `servidor.js`. Rodando num host de processo
-único (Railway, Render, Oracle Cloud) isso não é problema — é exatamente o
-que as instruções abaixo descrevem. Para rodar de verdade na Vercel
-(funções sem estado), esses dois pontos também precisariam ir para uma
-tabela — não foi pedido nesta etapa, por isso não foi feito.
+**Atualização (18/08/2026): o sistema agora roda na Vercel também.** Os dados,
+a sessão de login e a trava de tentativas de senha ficam todos no Supabase —
+nada mais depende de arquivo em disco nem de memória do processo do servidor,
+que eram os dois motivos originais de a Vercel não servir para este sistema.
 
-Duas notas valem para **qualquer** host escolhido:
+- `servidor.js` exporta um único handler (`tratarRequisicao`) usado tanto pelo
+  servidor de processo único (Railway/Render/Oracle/local — sobe um
+  `http.createServer` de verdade) quanto por `api/manipulador.js` (a função
+  da Vercel — só repassa a requisição para o mesmo handler). `vercel.json`
+  manda `/api/*` para essa função e o resto (`/`, `app.js`, `estilo.css` etc.)
+  direto para os arquivos estáticos em `publico/`.
+- Sessão de login e a trava de tentativas de senha (10 erradas por IP em 5
+  minutos) ficam em tabelas do Supabase (`sessoes`, `tentativas_login`), não
+  mais em memória — por isso agora tanto faz qual "cópia" da função atende
+  cada requisição, exatamente o que a Vercel precisa.
 
-- **Uma instância só**: sessão de login e a trava de tentativas de senha
-  ficam em memória do processo (não no banco). Isso significa que só pode
-  rodar **uma cópia** do servidor por vez — nunca ative "múltiplas réplicas"
-  nem "auto-scaling" na plataforma escolhida, enquanto isso não mudar.
-- **Segurança ao publicar**: com o site acessível por qualquer pessoa na
-  internet, adicionei uma trava simples contra tentativa repetida de senha (10
-  tentativas erradas do mesmo IP em 5 minutos e as próximas são recusadas por
-  um tempo) — vale tanto para o login quanto para o formulário de senha do
-  Davi na tela da Olivia. Os cookies de sessão também passam a exigir conexão
-  HTTPS quando o servidor detecta que está atrás de um proxy com HTTPS.
+**Configurar na Vercel** (painel do projeto → Settings → Environment
+Variables — isso eu não consigo fazer por aqui, precisa ser você): adicione
+`NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` com os
+mesmos valores do seu `.env` local. Sem isso a função falha logo de cara (o
+`banco.js` recusa subir sem essas duas). Depois de salvar, redeploy o projeto
+(a Vercel não aplica variável nova em um deploy já existente sozinha).
+
+Isso não muda nada para quem já estava usando Railway/Render/Oracle Cloud —
+continuam funcionando exatamente como nas instruções abaixo, que eu mantive
+como alternativa (ex.: se um dia quiser um domínio próprio mais simples de
+configurar, ou não gostar do modelo de cobrança da Vercel).
 
 ### Opção gratuita para sempre: Oracle Cloud "Always Free"
 

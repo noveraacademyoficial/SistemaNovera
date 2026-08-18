@@ -7,6 +7,7 @@
  * Nenhuma credencial fica escrita aqui: vem só de variáveis de ambiente
  * (arquivo .env local, nunca versionado, ou variáveis do host em produção).
  */
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 const URL_SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -118,15 +119,22 @@ async function gravarConjunto(chave, dados) {
 /* --------------------------------------------------- versão para polling */
 
 /**
- * Este processo Node é a única instância rodando (arquitetura exige isso,
- * ver LEIA-ME) e o único escritor com essa chave — por isso um contador em
- * memória, incrementado a cada gravação, já é um jeito barato e correto de
- * o cliente saber "algo mudou, vale recarregar", sem round-trip ao banco
- * a cada consulta de /api/versao.
+ * Carimbo barato de "algo mudou" para o cliente saber quando vale recarregar.
+ * Fica numa tabela (não em memória do processo): numa função sem estado
+ * (Vercel), cada requisição pode cair numa cópia "sem memória" nenhuma, então
+ * um contador local não serviria de nada — precisa ser algo que todo mundo
+ * (toda invocação, todo host) enxergue igual.
  */
-let versaoContador = 0;
-function bump() { versaoContador++; }
-function versaoAtual() { return String(versaoContador); }
+async function bump() {
+  const { error } = await supabase.from('metadados')
+    .upsert({ chave: 'versao', atualizado_em: new Date().toISOString() }, { onConflict: 'chave' });
+  if (error) console.error('Falha ao atualizar carimbo de versao:', error.message);
+}
+async function versaoAtual() {
+  const { data, error } = await supabase.from('metadados').select('atualizado_em').eq('chave', 'versao').maybeSingle();
+  if (error) throw new Error('Falha ao consultar versão: ' + error.message);
+  return data ? data.atualizado_em : '0';
+}
 
 /* --------------------------------------------------------------- contas */
 
@@ -148,7 +156,76 @@ async function contarContas() {
   return count || 0;
 }
 
+/* -------------------------------------------------------------- sessões
+   Guardadas no banco (não em memória do processo): numa função sem estado
+   (Vercel), cada requisição pode cair numa cópia nova, sem nenhuma memória
+   das anteriores — se a sessão vivesse só num Map local, cada clique
+   poderia "deslogar" a pessoa. Aqui, qualquer invocação, em qualquer host,
+   enxerga a mesma sessão.                                                */
+
+const DURACAO_SESSAO = 12 * 60 * 60 * 1000;
+
+async function criarSessao(conta) {
+  const token = crypto.randomBytes(24).toString('hex');
+  const expira = new Date(Date.now() + DURACAO_SESSAO).toISOString();
+  const { error } = await supabase.from('sessoes').insert({
+    token, usuario: conta.usuario, nome: conta.nome, perfil: conta.perfil, professor: conta.professor, expira,
+  });
+  if (error) throw new Error('Falha ao criar sessão: ' + error.message);
+  return token;
+}
+
+async function sessaoDoToken(token) {
+  if (!token) return null;
+  const { data, error } = await supabase.from('sessoes').select('*').eq('token', token).maybeSingle();
+  if (error) throw new Error('Falha ao consultar sessão: ' + error.message);
+  if (!data) return null;
+  if (new Date(data.expira).getTime() < Date.now()) {
+    supabase.from('sessoes').delete().eq('token', token).then(() => {}); // limpeza oportunista, não bloqueia a resposta
+    return null;
+  }
+  return { token, usuario: data.usuario, nome: data.nome, perfil: data.perfil, professor: data.professor };
+}
+
+async function destruirSessao(token) {
+  const { error } = await supabase.from('sessoes').delete().eq('token', token);
+  if (error) throw new Error('Falha ao encerrar sessão: ' + error.message);
+}
+
+/* ------------------------------------------- trava de tentativas de login
+   Mesma lógica de antes (10 tentativas erradas por IP em 5 minutos), só que
+   guardada no banco pelo mesmo motivo das sessões: uma trava só em memória
+   não vale nada numa função que reinicia do zero a cada requisição.       */
+
+const JANELA_LOGIN = 5 * 60 * 1000;
+const LIMITE_LOGIN = 10;
+
+async function loginBloqueado(ip) {
+  const { data, error } = await supabase.from('tentativas_login').select('*').eq('ip', ip).maybeSingle();
+  if (error) throw new Error('Falha ao consultar tentativas de login: ' + error.message);
+  if (!data) return false;
+  if (new Date(data.expira).getTime() < Date.now()) return false;
+  return data.contagem >= LIMITE_LOGIN;
+}
+
+async function registrarTentativaFalha(ip) {
+  const { data } = await supabase.from('tentativas_login').select('*').eq('ip', ip).maybeSingle();
+  const expirou = !data || new Date(data.expira).getTime() < Date.now();
+  const registro = expirou
+    ? { ip, contagem: 1, expira: new Date(Date.now() + JANELA_LOGIN).toISOString() }
+    : { ip, contagem: data.contagem + 1, expira: data.expira };
+  const { error } = await supabase.from('tentativas_login').upsert(registro, { onConflict: 'ip' });
+  if (error) throw new Error('Falha ao registrar tentativa: ' + error.message);
+}
+
+async function limparTentativas(ip) {
+  const { error } = await supabase.from('tentativas_login').delete().eq('ip', ip);
+  if (error) throw new Error('Falha ao limpar tentativas: ' + error.message);
+}
+
 module.exports = {
   supabase, lerConjunto, gravarConjunto, versaoAtual, bump,
   buscarConta, gravarConta, contarContas,
+  criarSessao, sessaoDoToken, destruirSessao, DURACAO_SESSAO,
+  loginBloqueado, registrarTentativaFalha, limparTentativas,
 };

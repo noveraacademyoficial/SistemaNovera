@@ -1,21 +1,21 @@
 /**
  * Sistema Financeiro - Novera Academy
  * Servidor sem dependências de framework (só o Node.js "http" puro).
- * Os dados ficam no Supabase (Postgres) — ver banco.js. Os antigos arquivos
- * dados/*.json continuam no disco só como backup histórico da migração;
- * o sistema não lê nem grava mais neles.
+ * Os dados, as sessões de login e a trava de tentativas de senha ficam no
+ * Supabase (Postgres) — ver banco.js. Os antigos arquivos dados/*.json
+ * continuam no disco só como backup histórico da migração; o sistema não
+ * lê nem grava mais neles.
  *
  * Acesso: a separacao entre a gestao financeira e as telas dos professores e
  * feita AQUI, no servidor. O navegador nunca recebe o que o perfil nao pode ver.
  *
- * Publicação na internet: o armazenamento (Supabase) já funciona em qualquer
- * host, inclusive serverless. O que AINDA prende este servidor a uma única
- * instância sempre ligada é o que fica em memória do processo: sessões de
- * login (`sessoes`) e a trava de tentativas de senha (`tentativasLogin`).
- * Rodando num host de processo único (Railway, Render, Oracle Cloud) isso não
- * é problema. Para rodar de verdade na Vercel (funções sem estado), esses
- * dois pontos também precisam sair da memória e ir para uma tabela — ainda
- * não foi pedido, por isso não foi feito nesta etapa.
+ * Duas formas de rodar, a partir do MESMO handler (`tratarRequisicao`):
+ *   - Host de processo único (Railway, Render, Oracle Cloud, local): este
+ *     arquivo sobe um `http.createServer` de verdade, como sempre.
+ *   - Vercel (funções sem estado): este arquivo só EXPORTA o handler;
+ *     quem "liga" a função é api/manipulador.js. Como sessão e trava de
+ *     login já vivem no banco (não em memória do processo), tanto faz qual
+ *     cópia da função atende cada requisição.
  */
 require('./carregarEnv');
 const http = require('http');
@@ -72,7 +72,8 @@ const TIPOS = {
  * git): num banco novo, sem nenhuma conta ainda, cria as contas a partir de
  * variáveis de ambiente — assim dá para publicar sem nunca commitar senha
  * nenhuma. Só roda se a tabela `usuarios` estiver vazia; nunca sobrescreve
- * contas já existentes.
+ * contas já existentes. Só é chamada pelo caminho de processo único (abaixo)
+ * — na Vercel as contas já existem no mesmo banco compartilhado.
  */
 async function garantirUsuariosIniciais() {
   const total = await banco.contarContas();
@@ -98,9 +99,6 @@ async function garantirUsuariosIniciais() {
 
 /* ------------------------------------------------------------- sessoes */
 
-const sessoes = new Map();   // token -> { usuario, expira }
-const DURACAO_SESSAO = 12 * 60 * 60 * 1000;
-
 async function autenticar(usuario, senha) {
   const conta = await banco.buscarConta(usuario);
   if (!conta) return null;
@@ -113,51 +111,18 @@ async function autenticar(usuario, senha) {
   return { usuario: conta.usuario, nome: conta.nome, perfil: conta.perfil, professor: conta.professor };
 }
 
-function criarSessao(conta) {
-  const token = crypto.randomBytes(24).toString('hex');
-  sessoes.set(token, { conta, expira: Date.now() + DURACAO_SESSAO });
-  return token;
-}
-
-function sessaoDe(req) {
+/** Só extrai o token do cookie (síncrono) — quem confere se é válido é banco.sessaoDoToken. */
+function tokenDoPedido(req) {
   const bruto = req.headers.cookie || '';
   const par = bruto.split(';').map(s => s.trim()).find(s => s.startsWith('novera_sessao='));
-  if (!par) return null;
-  const token = par.slice('novera_sessao='.length);
-  const sessao = sessoes.get(token);
-  if (!sessao) return null;
-  if (sessao.expira < Date.now()) { sessoes.delete(token); return null; }
-  return { token, ...sessao.conta };
+  return par ? par.slice('novera_sessao='.length) : null;
 }
-
-/**
- * Trava simples contra tentativa repetida de senha, por IP: depois de
- * LIMITE_LOGIN tentativas erradas dentro da JANELA_LOGIN, novas tentativas
- * são recusadas até a janela expirar. Sem isso, uma vez publicado na
- * internet, o login e o formulário de senha do Davi ficariam abertos a
- * tentativa e erro ilimitados.
- */
-const tentativasLogin = new Map();   // ip -> { contagem, expira }
-const JANELA_LOGIN = 5 * 60 * 1000;
-const LIMITE_LOGIN = 10;
 
 function ipDoPedido(req) {
   const encaminhado = req.headers['x-forwarded-for'];
   if (encaminhado) return encaminhado.split(',')[0].trim();
   return (req.socket && req.socket.remoteAddress) || 'desconhecido';
 }
-function loginBloqueado(ip) {
-  const registro = tentativasLogin.get(ip);
-  if (!registro) return false;
-  if (registro.expira < Date.now()) { tentativasLogin.delete(ip); return false; }
-  return registro.contagem >= LIMITE_LOGIN;
-}
-function registrarTentativaFalha(ip) {
-  const registro = tentativasLogin.get(ip);
-  if (!registro || registro.expira < Date.now()) tentativasLogin.set(ip, { contagem: 1, expira: Date.now() + JANELA_LOGIN });
-  else registro.contagem++;
-}
-function limparTentativas(ip) { tentativasLogin.delete(ip); }
 
 /** Acrescenta "Secure" ao cookie quando a conexão pública é HTTPS (atrás de proxy). */
 function cookieSeguro(req) {
@@ -236,7 +201,11 @@ function lerCorpo(req) {
   });
 }
 
-const servidor = http.createServer(async (req, res) => {
+/**
+ * O handler de toda requisição HTTP do sistema — usado tanto pelo servidor
+ * de processo único (abaixo) quanto pela função da Vercel (api/manipulador.js).
+ */
+async function tratarRequisicao(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const rota = decodeURIComponent(url.pathname);
 
@@ -244,27 +213,27 @@ const servidor = http.createServer(async (req, res) => {
     /* ---------------- sessao ---------------- */
     if (rota === '/api/entrar' && req.method === 'POST') {
       const ip = ipDoPedido(req);
-      if (loginBloqueado(ip)) return responderJson(res, 429, { erro: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.' });
+      if (await banco.loginBloqueado(ip)) return responderJson(res, 429, { erro: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.' });
       const corpo = await lerCorpo(req) || {};
       const conta = await autenticar(corpo.usuario, corpo.senha);
-      if (!conta) { registrarTentativaFalha(ip); return responderJson(res, 401, { erro: 'Usuário ou senha inválidos.' }); }
-      limparTentativas(ip);
-      const token = criarSessao(conta);
+      if (!conta) { await banco.registrarTentativaFalha(ip); return responderJson(res, 401, { erro: 'Usuário ou senha inválidos.' }); }
+      await banco.limparTentativas(ip);
+      const token = await banco.criarSessao(conta);
       return responderJson(res, 200, { ok: true, conta }, {
-        'Set-Cookie': `novera_sessao=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${DURACAO_SESSAO / 1000}${cookieSeguro(req)}`,
+        'Set-Cookie': `novera_sessao=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${banco.DURACAO_SESSAO / 1000}${cookieSeguro(req)}`,
       });
     }
 
     if (rota === '/api/sair' && req.method === 'POST') {
-      const sessao = sessaoDe(req);
-      if (sessao) sessoes.delete(sessao.token);
+      const token = tokenDoPedido(req);
+      if (token) await banco.destruirSessao(token);
       return responderJson(res, 200, { ok: true }, {
         'Set-Cookie': `novera_sessao=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${cookieSeguro(req)}`,
       });
     }
 
     if (rota === '/api/sessao' && req.method === 'GET') {
-      const sessao = sessaoDe(req);
+      const sessao = await banco.sessaoDoToken(tokenDoPedido(req));
       if (!sessao) return responderJson(res, 401, { erro: 'Sem sessão' });
       const { token, ...conta } = sessao;
       return responderJson(res, 200, { conta });
@@ -272,13 +241,13 @@ const servidor = http.createServer(async (req, res) => {
 
     /* ---------------- dados (exigem sessao) ---------------- */
     if (rota.startsWith('/api/')) {
-      const conta = sessaoDe(req);
+      const conta = await banco.sessaoDoToken(tokenDoPedido(req));
       if (!conta) return responderJson(res, 401, { erro: 'Faça login para continuar.' });
 
       // carimbo barato: muda sempre que algo e gravado no banco.
       // O cliente consulta de tempos em tempos e so recarrega quando muda.
       if (rota === '/api/versao' && req.method === 'GET') {
-        return responderJson(res, 200, { versao: banco.versaoAtual() });
+        return responderJson(res, 200, { versao: await banco.versaoAtual() });
       }
 
       if (rota === '/api/dados' && req.method === 'GET') {
@@ -295,7 +264,7 @@ const servidor = http.createServer(async (req, res) => {
        */
       if (rota === '/api/contagem-aulas' && req.method === 'POST') {
         const ip = ipDoPedido(req);
-        if (loginBloqueado(ip)) return responderJson(res, 429, { erro: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.' });
+        if (await banco.loginBloqueado(ip)) return responderJson(res, 429, { erro: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.' });
         const corpo = await lerCorpo(req) || {};
         const ano = Number(corpo.ano);
         const mes = Number(corpo.mes);
@@ -306,10 +275,10 @@ const servidor = http.createServer(async (req, res) => {
 
         const confirmacao = await autenticar(corpo.usuarioConfirmacao, corpo.senhaConfirmacao);
         if (!confirmacao || confirmacao.perfil !== 'admin') {
-          registrarTentativaFalha(ip);
+          await banco.registrarTentativaFalha(ip);
           return responderJson(res, 401, { erro: 'Usuário ou senha do Davi inválidos.' });
         }
-        limparTentativas(ip);
+        await banco.limparTentativas(ip);
         // quem não é admin só altera a própria contagem, mesmo com a senha do Davi em mãos
         const professorAlvo = ehAdmin(conta) ? (corpo.professor || conta.professor) : conta.professor;
 
@@ -371,7 +340,7 @@ const servidor = http.createServer(async (req, res) => {
       return responderJson(res, 404, { erro: 'Rota não encontrada' });
     }
 
-    /* ---------------- estatico ---------------- */
+    /* ---------------- estatico (so no processo unico — na Vercel isso e servido direto pelo CDN) ---------------- */
     const alvo = rota === '/' ? '/index.html' : rota;
     const caminho = path.join(PASTA_PUBLICO, path.normalize(alvo).replace(/^(\.\.[/\\])+/, ''));
     if (!caminho.startsWith(PASTA_PUBLICO)) { res.writeHead(403); res.end('Acesso negado'); return; }
@@ -382,21 +351,32 @@ const servidor = http.createServer(async (req, res) => {
     console.error('Erro na rota', rota, ':', erro && erro.message);
     return responderJson(res, 500, { erro: 'Erro interno. Tente novamente em instantes.' });
   }
-});
+}
 
-// Local (sem PORT definido pela plataforma): só a própria máquina acessa.
-// Publicado (Railway/Render definem PORT): precisa escutar em todas as interfaces.
-const HOST = process.env.HOST || (process.env.PORT ? '0.0.0.0' : '127.0.0.1');
+module.exports = tratarRequisicao;
 
-(async () => {
-  await garantirUsuariosIniciais();
-  servidor.listen(PORTA, HOST, () => {
-    console.log('');
-    console.log('  Sistema Financeiro | Novera Academy');
-    console.log('  ------------------------------------------------');
-    console.log('  Endereco:           ' + HOST + ':' + PORTA);
-    console.log('  Banco de dados:     Supabase (' + (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^https?:\/\//, '') + ')');
-    console.log('  Para encerrar:      Ctrl + C');
-    console.log('');
-  });
-})();
+/**
+ * Só sobe um servidor HTTP de verdade fora da Vercel (que define a variável
+ * VERCEL automaticamente em toda função). Na Vercel, este arquivo é só
+ * `require`ido por api/manipulador.js para pegar `tratarRequisicao` — quem
+ * liga a "escuta" é a própria plataforma.
+ */
+if (!process.env.VERCEL) {
+  const servidor = http.createServer(tratarRequisicao);
+  // Local (sem PORT definido pela plataforma): só a própria máquina acessa.
+  // Publicado (Railway/Render definem PORT): precisa escutar em todas as interfaces.
+  const HOST = process.env.HOST || (process.env.PORT ? '0.0.0.0' : '127.0.0.1');
+
+  (async () => {
+    await garantirUsuariosIniciais();
+    servidor.listen(PORTA, HOST, () => {
+      console.log('');
+      console.log('  Sistema Financeiro | Novera Academy');
+      console.log('  ------------------------------------------------');
+      console.log('  Endereco:           ' + HOST + ':' + PORTA);
+      console.log('  Banco de dados:     Supabase (' + (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^https?:\/\//, '') + ')');
+      console.log('  Para encerrar:      Ctrl + C');
+      console.log('');
+    });
+  })();
+}
