@@ -1,0 +1,11 @@
+# Dados reais do sistema (alunos, pagamentos, contas, senhas com hash) e os
+# backups automáticos — não versionados por conterem dados pessoais/sensíveis
+dados/
+
+# Planilha original, com os mesmos dados reais dos alunos
+*.xlsx
+
+# Cruft comum de SO/editor
+Thumbs.db
+.DS_Store
+node_modules/

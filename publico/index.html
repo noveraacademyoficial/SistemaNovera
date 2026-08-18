@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sistema Financeiro | Novera Academy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%235B4BE8'/><text y='70' x='50' text-anchor='middle' font-size='58' font-weight='bold' fill='white' font-family='Segoe UI'>N</text></svg>">
+  <script>
+    /* aplica o tema antes da primeira pintura, evitando piscada de cor */
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('novera-tema'); } catch (e) {}
+      if (t !== 'claro' && t !== 'escuro') {
+        t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro';
+      }
+      document.documentElement.setAttribute('data-tema', t);
+    })();
+    /* idem para o menu lateral recolhido, para não "pular" a largura ao carregar */
+    (function () {
+      var r = null;
+      try { r = localStorage.getItem('novera-menu-recolhido'); } catch (e) {}
+      if (r === '1') document.documentElement.setAttribute('data-menu', 'recolhido');
+    })();
+  </script>
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+
+  <div class="app">
+
+    <aside class="lateral" id="lateral">
+      <div class="marca">
+        <span class="simbolo">N</span>
+        <span class="texto-marca">
+          <strong>NOVERA</strong>
+          <span>Gestão financeira</span>
+        </span>
+      </div>
+
+      <nav id="menu"></nav>
+
+      <div class="rodape-lateral">
+        <div class="conta-ativa" id="contaAtiva" hidden>
+          <span class="avatar" id="contaInicial"></span>
+          <span class="conta-texto">
+            <strong id="contaNome"></strong>
+            <span id="contaPerfil"></span>
+          </span>
+          <button class="botao-sair" id="sair" type="button" title="Sair do sistema">⏻</button>
+        </div>
+        <button class="botao-tema" id="tema" type="button">
+          <span class="icone-tema" id="iconeTema">🌙</span>
+          <span id="rotuloTema">Modo escuro</span>
+        </button>
+        <div class="info-lateral" id="rodapeInfo"></div>
+      </div>
+    </aside>
+
+    <main class="conteudo">
+      <div class="cabecalho-pagina">
+        <button class="recolher-menu" id="recolherMenu" type="button" title="Recolher o menu lateral">☰</button>
+        <button class="voltar" id="voltar" title="Voltar à visão geral">←</button>
+        <div>
+          <h1 id="tituloAba">Carregando…</h1>
+          <p id="subtituloAba"></p>
+        </div>
+      </div>
+      <div class="painel" id="painel"></div>
+    </main>
+
+  </div>
+
+  <div class="aviso-salvo" id="aviso"></div>
+
+  <div class="tela-login" id="telaLogin" hidden>
+    <form class="cartao-login" id="formLogin" autocomplete="on">
+      <span class="simbolo">N</span>
+      <h1>Novera Academy</h1>
+      <p>Entre para acessar o sistema.</p>
+      <label>
+        <span>Usuário</span>
+        <input id="loginUsuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </label>
+      <label>
+        <span>Senha</span>
+        <input id="loginSenha" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <p class="erro-login" id="erroLogin" hidden></p>
+      <button class="botao" type="submit" id="botaoEntrar">Entrar</button>
+    </form>
+  </div>
+
+  <script src="motor.js"></script>
+  <script src="relatorios.js"></script>
+  <script src="professores.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
