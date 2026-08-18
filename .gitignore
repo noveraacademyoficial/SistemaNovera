@@ -13,3 +13,8 @@ dados/
 Thumbs.db
 .DS_Store
 node_modules/
+
+# Symlinks locais criados por "npx skills add" (caminho absoluto, só valem
+# nesta máquina) — o conteúdo de verdade dos skills fica em .agents/skills/,
+# que é o que vai pro Git. Recria sozinho rodando "npx skills add" de novo.
+.claude/skills/
