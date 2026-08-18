@@ -186,6 +186,7 @@ Sistema Financeiro\
 ├─ INICIAR.bat                          abre o sistema (uso local)
 ├─ package.json                         só para hosts na nuvem saberem rodar "npm start"
 ├─ servidor.js                          servidor
+├─ deploy\                              scripts para publicar numa VM (ver "Publicar na internet")
 ├─ dados\                               >>> SEUS DADOS <<<
 │  ├─ opcoes.json                       listas de seleção (aba Início)
 │  ├─ alunos.json                       cadastro de alunos
@@ -210,54 +211,128 @@ estado, sem disco persistente — os arquivos de `dados\` seriam apagados a cada
 novo deploy e nem sempre uma requisição enxergaria o que outra gravou no
 segundo antes. Como o servidor é justamente feito para gravar tudo em disco
 (e manter as sessões de login em memória), ele precisa de um host que rode um
-processo Node.js de verdade, com um disco que continua ali depois do deploy —
-por exemplo **Railway** ou **Render**.
+processo Node.js de verdade, com um disco que continua ali depois do deploy.
 
-Passo a passo (usando o Railway como exemplo, já que o código está no GitHub):
+Duas notas valem para **qualquer** host escolhido:
 
-1. **Criar o serviço**: no Railway, "New Project" → "Deploy from GitHub repo" →
-   escolher `noveraacademyoficial/SistemaNovera`. Ele detecta o `package.json`
-   e roda `npm start` sozinho.
-2. **Adicionar um Volume** (disco persistente): na aba do serviço, "Volumes" →
-   criar um, com **Mount Path** `/data`. Sem isso, os dados também seriam
-   perdidos a cada deploy, só que aqui no Railway em vez da Vercel.
-3. **Variáveis de ambiente** (aba "Variables"):
-   - `DADOS_DIR` = `/data` — manda o servidor gravar tudo no volume, não na
-     pasta do código (que é recriada a cada deploy).
-   - `ADMIN_USUARIO`, `ADMIN_SENHA` — criam a conta do Davi na primeira vez que
-     o servidor sobe (só funciona se `dados/usuarios.json` ainda não existir
-     nesse volume; depois da primeira vez pode até apagar essas duas variáveis,
-     a conta já foi criada e gravada).
-   - `PROF_USUARIO`, `PROF_SENHA` — mesma ideia, para a conta da Olivia.
-   - `PORT` já vem definida automaticamente pelo Railway — não precisa mexer.
-4. **Deploy**. Nos logs deve aparecer `usuarios.json criado a partir de
+- **Uma instância só**: o sistema guarda sessão de login em memória e grava
+  arquivo com trava simples (não é um banco de dados de verdade). Isso
+  significa que só pode rodar **uma cópia** do servidor por vez — nunca ative
+  "múltiplas réplicas" nem "auto-scaling" na plataforma escolhida.
+- **Segurança ao publicar**: com o site acessível por qualquer pessoa na
+  internet, adicionei uma trava simples contra tentativa repetida de senha (10
+  tentativas erradas do mesmo IP em 5 minutos e as próximas são recusadas por
+  um tempo) — vale tanto para o login quanto para o formulário de senha do
+  Davi na tela da Olivia. Os cookies de sessão também passam a exigir conexão
+  HTTPS quando o servidor detecta que está atrás de um proxy com HTTPS.
+
+### Opção gratuita para sempre: Oracle Cloud "Always Free"
+
+A Oracle mantém um plano de verdade gratuito para sempre: uma VM (máquina
+virtual) com disco persistente de verdade — roda exatamente como no seu
+computador hoje, sem as limitações da Vercel. É mais manual que um Railway,
+mas os arquivos em `deploy\` deste repositório automatizam quase tudo.
+
+**Passo 1 — criar a conta e a VM** (no navegador, em [cloud.oracle.com](https://cloud.oracle.com)):
+
+1. Crie a conta (pede cartão de crédito só para confirmar identidade — não
+   cobra nada enquanto você ficar dentro do plano Always Free).
+2. Escolha uma região perto do Brasil (ex.: São Paulo). Se aparecer "capacidade
+   esgotada" ao criar a VM, é um problema conhecido da Oracle com a região —
+   tente de novo mais tarde ou escolha outra região próxima.
+3. **Compute → Instances → Create Instance**:
+   - **Image**: Ubuntu (a versão LTS mais recente disponível).
+   - **Shape**: troque para "Ampere" → `VM.Standard.A1.Flex` → pode deixar no
+     máximo permitido pelo Always Free (hoje, 2 OCPUs / 12 GB — bem mais do
+     que este sistema precisa, mas não custa nada usar).
+   - **Add SSH keys**: deixe a Oracle gerar um par de chaves e baixe a chave
+     privada (arquivo `.key` ou `.pem`) — é como você vai entrar na VM depois.
+   - Confirme que "Assign a public IPv4 address" está marcado.
+   - Create.
+4. Anote o **endereço IP público** da instância, que aparece na página dela
+   depois de criada.
+5. **Networking → Virtual Cloud Networks** → (a rede da sua instância) →
+   **Security Lists** → a lista padrão → **Add Ingress Rules** → adicione duas
+   regras liberando `0.0.0.0/0` nas portas **80** e **443** (TCP). Sem isso o
+   site não abre, mesmo com tudo certo dentro da VM.
+
+**Passo 2 — um domínio para o HTTPS.** O Caddy (que cuida do HTTPS automático) precisa
+de um nome, não só do IP. Se você já tem um domínio, aponte um registro **A**
+dele para o IP público da VM. Se não tem, o [DuckDNS](https://www.duckdns.org)
+dá um subdomínio grátis (ex.: `noveraacademy.duckdns.org`) — entre com
+Google/GitHub, crie o subdomínio e aponte para o mesmo IP público.
+
+**Passo 3 — entrar na VM e rodar o script de configuração:**
+
+```bash
+ssh -i caminho/para/sua-chave.key ubuntu@SEU_IP_PUBLICO
+curl -fsSL https://raw.githubusercontent.com/noveraacademyoficial/SistemaNovera/main/deploy/setup.sh -o setup.sh
+sudo bash setup.sh
+```
+
+Na primeira vez, ele cria um arquivo de configuração e para, pedindo para você
+preenchê-lo:
+
+```bash
+nano /opt/sistema-financeiro/.env
+```
+
+Preencha `DOMINIO` (o domínio do passo 2), `ADMIN_SENHA` e `PROF_SENHA` (as
+senhas do Davi e da Olivia). Salve (`Ctrl+O`, Enter, `Ctrl+X`) e rode de novo:
+
+```bash
+sudo bash setup.sh
+```
+
+Dessa vez ele instala o Node.js, baixa o código, cria o serviço que mantém o
+sistema sempre ligado (reinicia sozinho se cair ou se a VM reiniciar), instala
+o Caddy com HTTPS automático para o seu domínio, e libera as portas no
+firewall da própria VM. No final, mostra o endereço para acessar.
+
+**Passo 4 — testar.** Acesse `https://SEU_DOMINIO`, entre com o usuário/senha que você
+definiu. Os demais dados (alunos, pagamentos etc.) **não são migrados
+automaticamente** — como `dados\` nunca vai para o GitHub de propósito (tem
+informação pessoal dos alunos), o servidor publicado começa vazio. Duas
+opções: recadastrar aos poucos pela própria tela, ou copiar os arquivos da sua
+pasta `dados\` local para `/opt/dados-sistema-financeiro` na VM via `scp` — se
+quiser esse segundo caminho, me avise que eu te guio pelo comando exato.
+
+**Atualizações futuras**: sempre que eu (ou você) alterar o código e enviar
+para o GitHub, é só entrar na VM de novo e rodar:
+
+```bash
+sudo bash /opt/sistema-financeiro/deploy/atualizar.sh
+```
+
+Isso baixa a versão mais nova e reinicia o serviço, sem mexer em nada de
+`dados\`.
+
+### Alternativa mais simples (paga): Railway ou Render
+
+Se preferir trocar o trabalho manual acima por um clique de "conectar o
+GitHub", o Railway (ou Render) fazem isso — por um valor pequeno por mês
+(no Railway, o plano Hobby de US$ 5/mês costuma cobrir tudo, já que esse valor
+vem como crédito de uso incluído). Passo a passo, usando o Railway:
+
+1. **New Project → Deploy from GitHub repo** → escolha
+   `noveraacademyoficial/SistemaNovera`. Ele detecta o `package.json` e roda
+   `npm start` sozinho.
+2. **Volumes** → crie um, com **Mount Path** `/data` (disco persistente —
+   sem isso, os dados seriam perdidos a cada novo deploy).
+3. **Variables**:
+   - `DADOS_DIR` = `/data`
+   - `ADMIN_USUARIO`, `ADMIN_SENHA`, `PROF_USUARIO`, `PROF_SENHA` — criam as
+     contas na primeira subida (pode apagar essas quatro depois que o primeiro
+     login funcionar).
+   - `PORT` já vem definida automaticamente pelo Railway.
+4. Deploy. Nos logs deve aparecer `usuarios.json criado a partir de
    variaveis de ambiente (2 conta(s))` na primeira subida.
-5. Entrar no site publicado com o usuário/senha que você definiu e conferir o
-   login. Os demais dados (alunos, pagamentos etc.) **não são migrados
-   automaticamente** — como `dados\` nunca vai para o GitHub de propósito
-   (tem informação pessoal dos alunos), o servidor publicado começa vazio.
-   Duas opções: recadastrar aos poucos pela própria tela, ou copiar os arquivos
-   da sua pasta `dados\` local para o volume do Railway (usando `railway ssh`
-   ou o terminal do próprio painel) — se quiser esse segundo caminho, me avise
-   que eu te guio pelos comandos exatos.
+5. Entrar no site publicado e conferir o login. Os demais dados (alunos,
+   pagamentos etc.) não são migrados automaticamente — mesma observação da
+   opção do Oracle Cloud acima.
 
-**Sobre o plano gratuito**: os créditos de avaliação do Railway não sustentam
-um volume ligado 24 horas por muito tempo; para o sistema ficar sempre no ar
-de forma confiável, o plano pago (bem barato, poucos dólares por mês) é o
-esperado — normal para uma ferramenta que já lida com dado real de pagamento.
-
-**Uma instância só**: o sistema guarda sessão de login em memória e grava
-arquivo com trava simples (não é um banco de dados de verdade). Isso significa
-que só pode rodar **uma cópia** do servidor por vez — nunca ative "múltiplas
-réplicas" nem "auto-scaling" na plataforma escolhida.
-
-**Segurança ao publicar**: com o site agora acessível por qualquer pessoa na
-internet, adicionei uma trava simples contra tentativa repetida de senha (10
-tentativas erradas do mesmo IP em 5 minutos e as próximas são recusadas por um
-tempo) — vale tanto para o login quanto para o formulário de senha do Davi na
-tela da Olivia. Os cookies de sessão também passam a exigir conexão HTTPS
-quando o servidor detecta que está atrás de um proxy com HTTPS (é o caso do
-Railway/Render, que já entregam HTTPS automaticamente).
+No Render, a lógica é igual, mas o disco persistente só existe a partir do
+plano pago Starter (o plano gratuito não permite disco nenhum).
 
 ---
 
