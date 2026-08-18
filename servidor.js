@@ -1,28 +1,34 @@
 /**
  * Sistema Financeiro - Novera Academy
- * Servidor sem dependencias externas (apenas Node.js).
- * Todos os dados sao lidos e gravados em arquivos *.json dentro de PASTA_DADOS.
+ * Servidor sem dependências de framework (só o Node.js "http" puro).
+ * Os dados ficam no Supabase (Postgres) — ver banco.js. Os antigos arquivos
+ * dados/*.json continuam no disco só como backup histórico da migração;
+ * o sistema não lê nem grava mais neles.
  *
  * Acesso: a separacao entre a gestao financeira e as telas dos professores e
  * feita AQUI, no servidor. O navegador nunca recebe o que o perfil nao pode ver.
  *
- * Publicacao na internet: este servidor precisa de disco persistente e de uma
- * unica instancia rodando (sessoes ficam em memoria, sem banco de dados) — nao
- * funciona em plataformas serverless/sem-estado como a Vercel. Em producao,
- * aponte DADOS_DIR para um volume persistente do host escolhido (ex.: Railway,
- * Render, Fly.io) e nunca rode mais de uma replica ao mesmo tempo.
+ * Publicação na internet: o armazenamento (Supabase) já funciona em qualquer
+ * host, inclusive serverless. O que AINDA prende este servidor a uma única
+ * instância sempre ligada é o que fica em memória do processo: sessões de
+ * login (`sessoes`) e a trava de tentativas de senha (`tentativasLogin`).
+ * Rodando num host de processo único (Railway, Render, Oracle Cloud) isso não
+ * é problema. Para rodar de verdade na Vercel (funções sem estado), esses
+ * dois pontos também precisam sair da memória e ir para uma tabela — ainda
+ * não foi pedido, por isso não foi feito nesta etapa.
  */
+require('./carregarEnv');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const banco = require('./banco');
 
 const RAIZ = __dirname;
-const PASTA_DADOS = process.env.DADOS_DIR ? path.resolve(process.env.DADOS_DIR) : path.join(RAIZ, 'dados');
 const PASTA_PUBLICO = path.join(RAIZ, 'publico');
-const PASTA_BACKUP = path.join(PASTA_DADOS, 'backups');
 const PORTA = Number(process.env.PORT) || Number(process.env.PORTA) || 3300;
 
+/** Chaves de conjunto válidas (o valor era o nome do arquivo .json; hoje é só documentação). */
 const ARQUIVOS = {
   opcoes: 'opcoes.json',
   alunos: 'alunos.json',
@@ -61,19 +67,16 @@ const TIPOS = {
   '.ico': 'image/x-icon',
 };
 
-fs.mkdirSync(PASTA_DADOS, { recursive: true });
-fs.mkdirSync(PASTA_BACKUP, { recursive: true });
-
 /**
- * dados/usuarios.json nunca vai para o git (tem hash de senha). Num servidor
- * novo, sem esse arquivo ainda, cria as contas a partir de variaveis de
- * ambiente — assim dá para publicar sem nunca commitar senha nenhuma, nem em
- * texto puro nem com hash. So roda se o arquivo NAO existir; nunca sobrescreve
- * contas que já foram criadas (pelo bootstrap ou por uso normal do sistema).
+ * Sem dados/usuarios.json no repositório (contém hash de senha, nunca vai pro
+ * git): num banco novo, sem nenhuma conta ainda, cria as contas a partir de
+ * variáveis de ambiente — assim dá para publicar sem nunca commitar senha
+ * nenhuma. Só roda se a tabela `usuarios` estiver vazia; nunca sobrescreve
+ * contas já existentes.
  */
-function iniciarUsuarios() {
-  const alvo = path.join(PASTA_DADOS, 'usuarios.json');
-  if (fs.existsSync(alvo)) return;
+async function garantirUsuariosIniciais() {
+  const total = await banco.contarContas();
+  if (total > 0) return;
 
   const contas = [];
   const adicionar = (usuario, senha, nome, perfil, professor) => {
@@ -86,38 +89,11 @@ function iniciarUsuarios() {
   adicionar(process.env.PROF_USUARIO, process.env.PROF_SENHA, process.env.PROF_NOME || 'Olivia', 'professor', process.env.PROF_PROFESSOR || process.env.PROF_NOME || 'Olivia');
 
   if (contas.length) {
-    fs.writeFileSync(alvo, JSON.stringify(contas, null, 2), 'utf8');
-    console.log('  usuarios.json criado a partir de variaveis de ambiente (' + contas.length + ' conta(s)).');
+    for (const conta of contas) await banco.gravarConta(conta);
+    console.log('  usuarios criados a partir de variaveis de ambiente (' + contas.length + ' conta(s)).');
   } else {
-    console.log('  Aviso: dados/usuarios.json nao existe e nenhuma variavel ADMIN_USUARIO/ADMIN_SENHA foi definida — ninguem consegue entrar ainda.');
+    console.log('  Aviso: a tabela usuarios esta vazia e nenhuma variavel ADMIN_USUARIO/ADMIN_SENHA foi definida — ninguem consegue entrar ainda.');
   }
-}
-iniciarUsuarios();
-
-/* ------------------------------------------------------------------ dados */
-
-function lerJson(arquivo, padrao) {
-  try { return JSON.parse(fs.readFileSync(path.join(PASTA_DADOS, arquivo), 'utf8')); }
-  catch (e) { return padrao; }
-}
-
-function gravarJson(arquivo, dados) {
-  const alvo = path.join(PASTA_DADOS, arquivo);
-  if (fs.existsSync(alvo)) {
-    const carimbo = new Date().toISOString().replace(/[:.]/g, '-');
-    fs.copyFileSync(alvo, path.join(PASTA_BACKUP, carimbo + '_' + arquivo));
-  }
-  const temporario = alvo + '.tmp';
-  fs.writeFileSync(temporario, JSON.stringify(dados, null, 2), 'utf8');
-  fs.renameSync(temporario, alvo);
-  limparBackups();
-}
-
-function limparBackups() {
-  try {
-    const itens = fs.readdirSync(PASTA_BACKUP).sort();
-    for (let i = 0; i < itens.length - 200; i++) fs.unlinkSync(path.join(PASTA_BACKUP, itens[i]));
-  } catch (e) { /* backup nunca derruba o servidor */ }
 }
 
 /* ------------------------------------------------------------- sessoes */
@@ -125,8 +101,8 @@ function limparBackups() {
 const sessoes = new Map();   // token -> { usuario, expira }
 const DURACAO_SESSAO = 12 * 60 * 60 * 1000;
 
-function autenticar(usuario, senha) {
-  const conta = lerJson('usuarios.json', []).find(u => u.usuario === String(usuario || '').trim().toLowerCase());
+async function autenticar(usuario, senha) {
+  const conta = await banco.buscarConta(usuario);
   if (!conta) return null;
   let calculado;
   try { calculado = crypto.scryptSync(String(senha || ''), conta.salt, 64).toString('hex'); }
@@ -193,12 +169,13 @@ function cookieSeguro(req) {
 const ehAdmin = conta => conta && conta.perfil === 'admin';
 
 /** O pacote de dados que este perfil pode receber. */
-function pacoteVisivel(conta) {
-  const pacote = {};
+async function pacoteVisivel(conta) {
   const chaves = ehAdmin(conta) ? Object.keys(ARQUIVOS) : CONJUNTOS_DO_PROFESSOR;
+  const pares = await Promise.all(chaves.map(async chave => [chave, await banco.lerConjunto(chave, null)]));
 
-  chaves.forEach(chave => {
-    let dados = lerJson(ARQUIVOS[chave], null);
+  const pacote = {};
+  pares.forEach(([chave, dadosLidos]) => {
+    let dados = dadosLidos;
     if (!ehAdmin(conta) && Array.isArray(dados)) {
       if (chave === 'alunos') {
         dados = dados
@@ -219,8 +196,8 @@ function podeGravar(conta, chave) {
   return CONJUNTOS_GRAVAVEIS_PELO_PROFESSOR.includes(chave);
 }
 
-function mesclarDoProfessor(conta, chave, recebido) {
-  const atual = lerJson(ARQUIVOS[chave], []);
+async function mesclarDoProfessor(conta, chave, recebido) {
+  const atual = await banco.lerConjunto(chave, []);
   if (!Array.isArray(atual) || !Array.isArray(recebido)) return recebido;
   const deOutros = atual.filter(x => String(x.professor || '') !== conta.professor);
   const meus = recebido.map(x => ({ ...x, professor: conta.professor }));   // professor sempre carimbado
@@ -269,7 +246,7 @@ const servidor = http.createServer(async (req, res) => {
       const ip = ipDoPedido(req);
       if (loginBloqueado(ip)) return responderJson(res, 429, { erro: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.' });
       const corpo = await lerCorpo(req) || {};
-      const conta = autenticar(corpo.usuario, corpo.senha);
+      const conta = await autenticar(corpo.usuario, corpo.senha);
       if (!conta) { registrarTentativaFalha(ip); return responderJson(res, 401, { erro: 'Usuário ou senha inválidos.' }); }
       limparTentativas(ip);
       const token = criarSessao(conta);
@@ -298,18 +275,15 @@ const servidor = http.createServer(async (req, res) => {
       const conta = sessaoDe(req);
       if (!conta) return responderJson(res, 401, { erro: 'Faça login para continuar.' });
 
-      // carimbo barato: muda sempre que algum arquivo de dados e gravado.
+      // carimbo barato: muda sempre que algo e gravado no banco.
       // O cliente consulta de tempos em tempos e so recarrega quando muda.
       if (rota === '/api/versao' && req.method === 'GET') {
-        const carimbo = Object.values(ARQUIVOS).map(arquivo => {
-          try { return fs.statSync(path.join(PASTA_DADOS, arquivo)).mtimeMs; }
-          catch (e) { return 0; }
-        }).join('-');
-        return responderJson(res, 200, { versao: carimbo });
+        return responderJson(res, 200, { versao: banco.versaoAtual() });
       }
 
       if (rota === '/api/dados' && req.method === 'GET') {
-        return responderJson(res, 200, { conta: { usuario: conta.usuario, nome: conta.nome, perfil: conta.perfil, professor: conta.professor }, ...pacoteVisivel(conta) });
+        const pacote = await pacoteVisivel(conta);
+        return responderJson(res, 200, { conta: { usuario: conta.usuario, nome: conta.nome, perfil: conta.perfil, professor: conta.professor }, ...pacote });
       }
 
       /**
@@ -330,7 +304,7 @@ const servidor = http.createServer(async (req, res) => {
           return responderJson(res, 400, { erro: 'Informe ano, mês (1-12) e um valor válido.' });
         }
 
-        const confirmacao = autenticar(corpo.usuarioConfirmacao, corpo.senhaConfirmacao);
+        const confirmacao = await autenticar(corpo.usuarioConfirmacao, corpo.senhaConfirmacao);
         if (!confirmacao || confirmacao.perfil !== 'admin') {
           registrarTentativaFalha(ip);
           return responderJson(res, 401, { erro: 'Usuário ou senha do Davi inválidos.' });
@@ -339,12 +313,12 @@ const servidor = http.createServer(async (req, res) => {
         // quem não é admin só altera a própria contagem, mesmo com a senha do Davi em mãos
         const professorAlvo = ehAdmin(conta) ? (corpo.professor || conta.professor) : conta.professor;
 
-        const lista = lerJson(ARQUIVOS.contagemAulas, []);
+        const lista = await banco.lerConjunto('contagemAulas', []);
         const i = lista.findIndex(x => x.professor === professorAlvo && Number(x.ano) === ano && Number(x.mes) === mes);
         // ajuste manual = tratado como um total "normal" fresco; zera o destaque de remarcação
         const registro = { id: i >= 0 ? lista[i].id : ('ca_' + Date.now().toString(36)), professor: professorAlvo, ano, mes, valor, remarcacao: 0 };
         if (i >= 0) lista[i] = registro; else lista.push(registro);
-        gravarJson(ARQUIVOS.contagemAulas, lista);
+        await banco.gravarConjunto('contagemAulas', lista);
         return responderJson(res, 200, { ok: true, registro });
       }
 
@@ -370,7 +344,7 @@ const servidor = http.createServer(async (req, res) => {
         const ano = agora.getUTCFullYear();
         const mes = agora.getUTCMonth() + 1;
 
-        const lista = lerJson(ARQUIVOS.contagemAulas, []);
+        const lista = await banco.lerConjunto('contagemAulas', []);
         const i = lista.findIndex(x => x.professor === professorAlvo && Number(x.ano) === ano && Number(x.mes) === mes);
         const anterior = i >= 0 ? lista[i] : null;
         const valorAtual = anterior ? Number(anterior.valor) || 0 : 0;
@@ -379,7 +353,7 @@ const servidor = http.createServer(async (req, res) => {
         const novaRemarcacao = origem === 'remarcacao' ? Math.max(0, Math.min(novoValor, remarcacaoAtual + delta)) : Math.min(novoValor, remarcacaoAtual);
         const registro = { id: anterior ? anterior.id : ('ca_' + Date.now().toString(36)), professor: professorAlvo, ano, mes, valor: novoValor, remarcacao: novaRemarcacao };
         if (i >= 0) lista[i] = registro; else lista.push(registro);
-        gravarJson(ARQUIVOS.contagemAulas, lista);
+        await banco.gravarConjunto('contagemAulas', lista);
         return responderJson(res, 200, { ok: true, registro });
       }
 
@@ -389,8 +363,8 @@ const servidor = http.createServer(async (req, res) => {
         if (!podeGravar(conta, chave)) return responderJson(res, 403, { erro: 'Seu acesso não permite alterar este conjunto.' });
         const corpo = await lerCorpo(req);
         if (corpo === null || corpo === undefined) return responderJson(res, 400, { erro: 'Corpo vazio' });
-        const final = ehAdmin(conta) ? corpo : mesclarDoProfessor(conta, chave, corpo);
-        gravarJson(ARQUIVOS[chave], final);
+        const final = ehAdmin(conta) ? corpo : await mesclarDoProfessor(conta, chave, corpo);
+        await banco.gravarConjunto(chave, final);
         return responderJson(res, 200, { ok: true });
       }
 
@@ -403,7 +377,10 @@ const servidor = http.createServer(async (req, res) => {
     if (!caminho.startsWith(PASTA_PUBLICO)) { res.writeHead(403); res.end('Acesso negado'); return; }
     return servirArquivo(res, caminho);
   } catch (erro) {
-    return responderJson(res, 500, { erro: String(erro && erro.message || erro) });
+    // nunca ecoa o corpo do erro do banco/driver na resposta alem da mensagem —
+    // sem stack, sem detalhes de conexao, sem nada que exponha estrutura interna.
+    console.error('Erro na rota', rota, ':', erro && erro.message);
+    return responderJson(res, 500, { erro: 'Erro interno. Tente novamente em instantes.' });
   }
 });
 
@@ -411,12 +388,15 @@ const servidor = http.createServer(async (req, res) => {
 // Publicado (Railway/Render definem PORT): precisa escutar em todas as interfaces.
 const HOST = process.env.HOST || (process.env.PORT ? '0.0.0.0' : '127.0.0.1');
 
-servidor.listen(PORTA, HOST, () => {
-  console.log('');
-  console.log('  Sistema Financeiro | Novera Academy');
-  console.log('  ------------------------------------------------');
-  console.log('  Endereco:           ' + HOST + ':' + PORTA);
-  console.log('  Dados salvos em:    ' + PASTA_DADOS);
-  console.log('  Para encerrar:      Ctrl + C');
-  console.log('');
-});
+(async () => {
+  await garantirUsuariosIniciais();
+  servidor.listen(PORTA, HOST, () => {
+    console.log('');
+    console.log('  Sistema Financeiro | Novera Academy');
+    console.log('  ------------------------------------------------');
+    console.log('  Endereco:           ' + HOST + ':' + PORTA);
+    console.log('  Banco de dados:     Supabase (' + (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/^https?:\/\//, '') + ')');
+    console.log('  Para encerrar:      Ctrl + C');
+    console.log('');
+  });
+})();

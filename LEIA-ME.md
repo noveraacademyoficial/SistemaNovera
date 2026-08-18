@@ -178,47 +178,70 @@ existindo na tela do Davi, sem mudança.
 
 ## Onde ficam os dados
 
-Tudo é gravado automaticamente, sem botão de salvar, dentro desta pasta:
+**Desde 18/08/2026, os dados ficam no Supabase (Postgres), não mais em arquivos.**
+Toda leitura e gravação passa por `banco.js`, que fala com o banco pela
+biblioteca `@supabase/supabase-js`. A pasta `dados\*.json` que existia antes
+**continua no disco como backup histórico** de como tudo estava até a
+migração — o sistema não lê nem grava mais nela.
 
 ```
 Sistema Financeiro\
 ├─ Análise de aulas - atualizado.xlsx   planilha original (nunca é alterada)
 ├─ INICIAR.bat                          abre o sistema (uso local)
-├─ package.json                         só para hosts na nuvem saberem rodar "npm start"
-├─ servidor.js                          servidor
-├─ deploy\                              scripts para publicar numa VM (ver "Publicar na internet")
-├─ dados\                               >>> SEUS DADOS <<<
-│  ├─ opcoes.json                       listas de seleção (aba Início)
-│  ├─ alunos.json                       cadastro de alunos
-│  ├─ pagamentos.json                   pagamentos de mensalidades
-│  ├─ financeiro2026.json               financeiro da escola + premissas
-│  ├─ contaPessoal2026.json             conta pessoal
-│  ├─ financeiro2027.json               premissas da projeção
-│  └─ backups\                          cópia automática a cada alteração
+├─ package.json                         dependências (@supabase/*) e "npm start"
+├─ carregarEnv.js                       lê o .env local para dentro do processo
+├─ banco.js                             camada de acesso ao Supabase (único lugar que fala com o banco)
+├─ servidor.js                          servidor HTTP
+├─ deploy\                              scripts de publicação e o schema do banco
+│  ├─ schema.sql                        schema original (Supabase SQL Editor)
+│  ├─ schema-correcao-*.sql             correções aplicadas depois (histórico)
+│  └─ migrar-para-supabase.js           script que moveu dados\*.json pro banco
+├─ dados\                               >>> BACKUP HISTÓRICO, não é mais a fonte ativa <<<
+│  └─ (os mesmos arquivos de antes, congelados na migração)
 └─ publico\                             a interface (html, css, motor de cálculo)
 ```
 
-A cada gravação o sistema guarda uma cópia da versão anterior em `dados\backups`
-(mantém as 200 mais recentes). Para voltar atrás, basta copiar o arquivo desejado
-de `backups` por cima do arquivo em `dados`.
+**Tabelas no Supabase**: `usuarios`, `alunos`, `aulas`, `pagamentos`,
+`remarcacoes`, `experimentais`, `dados_aulas`, `contagem_aulas`, `banco_dados`
+— uma linha por registro. `financeiro2026`, `financeiro2027`,
+`conta_pessoal_2026` e `opcoes` ficam como documento (JSONB) numa tabela
+`configuracoes`, porque são a réplica das fórmulas do Excel (arrays de 12
+meses, premissas) — não fazem sentido virar linha de tabela.
+
+**Segurança do banco**: a chave usada (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)
+fica só no servidor, nunca é enviada ao navegador — quem decide o que cada
+pessoa vê ou grava continua sendo o login por sessão de sempre, exatamente
+como quando os dados estavam em arquivo. Row Level Security está desligada
+de propósito nas tabelas (ver comentário no topo de `deploy/schema.sql`): não
+tem Supabase Auth nesta etapa, então uma política de RLS baseada em usuário
+autenticado do Supabase não faria sentido aqui.
+
+**Variáveis de ambiente necessárias**: `NEXT_PUBLIC_SUPABASE_URL` e
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — em desenvolvimento local, num arquivo
+`.env` na raiz (nunca commitado, já está no `.gitignore`); em produção, como
+variável de ambiente do host escolhido.
 
 ---
 
 ## Publicar na internet
 
-Este sistema **não roda na Vercel**: ela publica o código como funções sem
-estado, sem disco persistente — os arquivos de `dados\` seriam apagados a cada
-novo deploy e nem sempre uma requisição enxergaria o que outra gravou no
-segundo antes. Como o servidor é justamente feito para gravar tudo em disco
-(e manter as sessões de login em memória), ele precisa de um host que rode um
-processo Node.js de verdade, com um disco que continua ali depois do deploy.
+**Atualização (18/08/2026): desde a migração para o Supabase, o motivo original
+de não rodar na Vercel (disco apagado a cada deploy) não existe mais** — os
+dados já vivem num banco de verdade, acessível de qualquer host. O que ainda
+prende o servidor a uma única instância sempre ligada é o que continua em
+memória do processo: a sessão de login (`sessoes`) e a trava de tentativas de
+senha (`tentativasLogin`), em `servidor.js`. Rodando num host de processo
+único (Railway, Render, Oracle Cloud) isso não é problema — é exatamente o
+que as instruções abaixo descrevem. Para rodar de verdade na Vercel
+(funções sem estado), esses dois pontos também precisariam ir para uma
+tabela — não foi pedido nesta etapa, por isso não foi feito.
 
 Duas notas valem para **qualquer** host escolhido:
 
-- **Uma instância só**: o sistema guarda sessão de login em memória e grava
-  arquivo com trava simples (não é um banco de dados de verdade). Isso
-  significa que só pode rodar **uma cópia** do servidor por vez — nunca ative
-  "múltiplas réplicas" nem "auto-scaling" na plataforma escolhida.
+- **Uma instância só**: sessão de login e a trava de tentativas de senha
+  ficam em memória do processo (não no banco). Isso significa que só pode
+  rodar **uma cópia** do servidor por vez — nunca ative "múltiplas réplicas"
+  nem "auto-scaling" na plataforma escolhida, enquanto isso não mudar.
 - **Segurança ao publicar**: com o site acessível por qualquer pessoa na
   internet, adicionei uma trava simples contra tentativa repetida de senha (10
   tentativas erradas do mesmo IP em 5 minutos e as próximas são recusadas por
@@ -229,9 +252,10 @@ Duas notas valem para **qualquer** host escolhido:
 ### Opção gratuita para sempre: Oracle Cloud "Always Free"
 
 A Oracle mantém um plano de verdade gratuito para sempre: uma VM (máquina
-virtual) com disco persistente de verdade — roda exatamente como no seu
-computador hoje, sem as limitações da Vercel. É mais manual que um Railway,
-mas os arquivos em `deploy\` deste repositório automatizam quase tudo.
+virtual) que roda o servidor continuamente — os dados já estão no Supabase,
+então essa VM não precisa mais de disco próprio para os dados, só para rodar
+o processo do Node.js. É mais manual que um Railway, mas os arquivos em
+`deploy\` deste repositório automatizam quase tudo.
 
 **Passo 1 — criar a conta e a VM** (no navegador, em [cloud.oracle.com](https://cloud.oracle.com)):
 
@@ -277,8 +301,12 @@ preenchê-lo:
 nano /opt/sistema-financeiro/.env
 ```
 
-Preencha `DOMINIO` (o domínio do passo 2), `ADMIN_SENHA` e `PROF_SENHA` (as
-senhas do Davi e da Olivia). Salve (`Ctrl+O`, Enter, `Ctrl+X`) e rode de novo:
+Preencha `DOMINIO` (o domínio do passo 2) e `NEXT_PUBLIC_SUPABASE_URL` /
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (os mesmos valores do `.env` local,
+em Project Settings → API no painel do Supabase). `ADMIN_SENHA`/`PROF_SENHA`
+só são necessárias se um dia a tabela `usuarios` estiver vazia — como as
+contas já existem no banco, pode deixar em branco. Salve (`Ctrl+O`, Enter,
+`Ctrl+X`) e rode de novo:
 
 ```bash
 sudo bash setup.sh
@@ -289,13 +317,11 @@ sistema sempre ligado (reinicia sozinho se cair ou se a VM reiniciar), instala
 o Caddy com HTTPS automático para o seu domínio, e libera as portas no
 firewall da própria VM. No final, mostra o endereço para acessar.
 
-**Passo 4 — testar.** Acesse `https://SEU_DOMINIO`, entre com o usuário/senha que você
-definiu. Os demais dados (alunos, pagamentos etc.) **não são migrados
-automaticamente** — como `dados\` nunca vai para o GitHub de propósito (tem
-informação pessoal dos alunos), o servidor publicado começa vazio. Duas
-opções: recadastrar aos poucos pela própria tela, ou copiar os arquivos da sua
-pasta `dados\` local para `/opt/dados-sistema-financeiro` na VM via `scp` — se
-quiser esse segundo caminho, me avise que eu te guio pelo comando exato.
+**Passo 4 — testar.** Acesse `https://SEU_DOMINIO`, entre com o usuário/senha de
+sempre. Como os dados já estão no Supabase (não em arquivo local), **não
+precisa recadastrar nada** — o servidor publicado enxerga exatamente os
+mesmos alunos, pagamentos etc. que você vê rodando localmente, porque os
+dois falam com o mesmo banco.
 
 **Atualizações futuras**: sempre que eu (ou você) alterar o código e enviar
 para o GitHub, é só entrar na VM de novo e rodar:
@@ -304,35 +330,26 @@ para o GitHub, é só entrar na VM de novo e rodar:
 sudo bash /opt/sistema-financeiro/deploy/atualizar.sh
 ```
 
-Isso baixa a versão mais nova e reinicia o serviço, sem mexer em nada de
-`dados\`.
+Isso baixa a versão mais nova e reinicia o serviço.
 
 ### Alternativa mais simples (paga): Railway ou Render
 
 Se preferir trocar o trabalho manual acima por um clique de "conectar o
-GitHub", o Railway (ou Render) fazem isso — por um valor pequeno por mês
-(no Railway, o plano Hobby de US$ 5/mês costuma cobrir tudo, já que esse valor
-vem como crédito de uso incluído). Passo a passo, usando o Railway:
+GitHub", o Railway (ou Render) fazem isso — por um valor pequeno por mês.
+Como os dados já estão no Supabase, **não precisa mais de Volume/disco
+persistente** — só das variáveis de ambiente:
 
 1. **New Project → Deploy from GitHub repo** → escolha
    `noveraacademyoficial/SistemaNovera`. Ele detecta o `package.json` e roda
    `npm start` sozinho.
-2. **Volumes** → crie um, com **Mount Path** `/data` (disco persistente —
-   sem isso, os dados seriam perdidos a cada novo deploy).
-3. **Variables**:
-   - `DADOS_DIR` = `/data`
-   - `ADMIN_USUARIO`, `ADMIN_SENHA`, `PROF_USUARIO`, `PROF_SENHA` — criam as
-     contas na primeira subida (pode apagar essas quatro depois que o primeiro
-     login funcionar).
-   - `PORT` já vem definida automaticamente pelo Railway.
-4. Deploy. Nos logs deve aparecer `usuarios.json criado a partir de
-   variaveis de ambiente (2 conta(s))` na primeira subida.
-5. Entrar no site publicado e conferir o login. Os demais dados (alunos,
-   pagamentos etc.) não são migrados automaticamente — mesma observação da
-   opção do Oracle Cloud acima.
+2. **Variables**: `NEXT_PUBLIC_SUPABASE_URL` e
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (os mesmos do `.env` local).
+   `PORT` já vem definida automaticamente pela plataforma.
+3. Deploy. Entrar no site publicado e conferir o login — os dados já estão
+   todos lá, vindos do mesmo Supabase.
 
-No Render, a lógica é igual, mas o disco persistente só existe a partir do
-plano pago Starter (o plano gratuito não permite disco nenhum).
+Isso vale tanto para o Railway quanto para o Render (o plano gratuito de
+ambos passa a servir, já que não precisam mais de disco).
 
 ---
 

@@ -58,16 +58,19 @@ echo "== 3/6 — variáveis de ambiente (.env) =="
 if [ ! -f "$ARQUIVO_ENV" ]; then
   cat > "$ARQUIVO_ENV" <<'MODELO'
 # Preencha os valores abaixo e rode "sudo bash setup.sh" de novo.
-DADOS_DIR=/opt/dados-sistema-financeiro
 PORT=3300
 
 # Domínio que vai apontar para o IP público desta VM (ex.: noveraacademy.duckdns.org
 # ou um domínio seu). Sem isso o Caddy não consegue emitir o certificado HTTPS.
 DOMINIO=
 
-# Só usadas na primeira vez que o sistema sobe (para criar as contas de login).
-# Depois do primeiro deploy com sucesso, pode apagar essas quatro linhas —
-# a conta já foi criada e gravada em dados/usuarios.json, elas não fazem mais nada.
+# Mesmos valores do seu .env local (painel do Supabase → Project Settings → API).
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+
+# Só usadas se a tabela "usuarios" do Supabase ainda estiver vazia (para criar
+# as contas de login pela primeira vez). Se já existem contas no banco, pode
+# deixar em branco — elas não fazem nada nesse caso.
 ADMIN_USUARIO=davi
 ADMIN_SENHA=
 PROF_USUARIO=olivia
