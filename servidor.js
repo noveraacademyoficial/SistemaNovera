@@ -171,23 +171,36 @@ async function mesclarDoProfessor(conta, chave, recebido) {
 
 /* ---------------------------------------------------------------- http */
 
+/**
+ * Cabeçalhos de segurança em TODA resposta (dado ou arquivo estático):
+ * impedem o site de ser carregado dentro de um <iframe> de outro site
+ * (clickjacking), impedem o navegador de "adivinhar" um tipo de arquivo
+ * diferente do declarado (MIME-sniffing) e evitam vazar a URL completa
+ * como referrer para outros sites.
+ */
+const CABECALHOS_SEGURANCA = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
+
 function responderJson(res, status, corpo, cabecalhosExtras) {
   const texto = JSON.stringify(corpo);
   res.writeHead(status, Object.assign({
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Content-Length': Buffer.byteLength(texto),
-  }, cabecalhosExtras || {}));
+  }, CABECALHOS_SEGURANCA, cabecalhosExtras || {}));
   res.end(texto);
 }
 
 function servirArquivo(res, alvo) {
   fs.readFile(alvo, (erro, conteudo) => {
-    if (erro) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Arquivo nao encontrado'); return; }
-    res.writeHead(200, {
+    if (erro) { res.writeHead(404, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, CABECALHOS_SEGURANCA)); res.end('Arquivo nao encontrado'); return; }
+    res.writeHead(200, Object.assign({
       'Content-Type': TIPOS[path.extname(alvo).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': 'no-store',
-    });
+    }, CABECALHOS_SEGURANCA));
     res.end(conteudo);
   });
 }
@@ -343,7 +356,7 @@ async function tratarRequisicao(req, res) {
     /* ---------------- estatico (so no processo unico — na Vercel isso e servido direto pelo CDN) ---------------- */
     const alvo = rota === '/' ? '/index.html' : rota;
     const caminho = path.join(PASTA_PUBLICO, path.normalize(alvo).replace(/^(\.\.[/\\])+/, ''));
-    if (!caminho.startsWith(PASTA_PUBLICO)) { res.writeHead(403); res.end('Acesso negado'); return; }
+    if (!caminho.startsWith(PASTA_PUBLICO)) { res.writeHead(403, CABECALHOS_SEGURANCA); res.end('Acesso negado'); return; }
     return servirArquivo(res, caminho);
   } catch (erro) {
     // nunca ecoa o corpo do erro do banco/driver na resposta alem da mensagem —

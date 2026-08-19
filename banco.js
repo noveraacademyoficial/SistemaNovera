@@ -4,6 +4,15 @@
  * resto do sistema (servidor.js, publico/app.js, publico/motor.js) sempre
  * usou, para não precisar mexer em nada além de quem lê/grava.
  *
+ * Usa a chave "service_role" (não a publicável): as tabelas têm Row Level
+ * Security ligada e sem nenhuma política para os papéis anon/authenticated
+ * (ver deploy/schema-rls.sql) — só service_role, que ignora RLS por
+ * definição, consegue ler ou gravar. Isso é o que faz a chave que o
+ * servidor usa não servir pra nada se um dia vazar sozinha, sem o resto do
+ * sistema: sem ela, ninguém entra no banco. Por isso é ainda mais crítico
+ * que NUNCA vá para o navegador, para o git, ou para fora do servidor —
+ * bem mais sensível que a antiga chave publicável.
+ *
  * Nenhuma credencial fica escrita aqui: vem só de variáveis de ambiente
  * (arquivo .env local, nunca versionado, ou variáveis do host em produção).
  */
@@ -11,11 +20,11 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 const URL_SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const CHAVE_SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const CHAVE_SUPABASE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!URL_SUPABASE || !CHAVE_SUPABASE) {
   throw new Error(
-    'Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ' +
+    'Configure NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY ' +
     '(arquivo .env local, ou variável de ambiente do host em produção).'
   );
 }
