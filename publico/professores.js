@@ -63,7 +63,7 @@ function camposAulaPara(professor) {
 
 /** Remarcações — campos exatamente como na planilha "Remarcação dos alunos". */
 const CAMPOS_REMARCACAO = [
-  { chave: 'aluno', rotulo: 'Name', listaAlunos: true, largura: 170 },
+  { chave: 'aluno', rotulo: 'Name', autocompleteAlunos: true, largura: 170 },
   { chave: 'ativa', rotulo: 'Aula feita', lista: SIM_NAO, largura: 90 },
   { chave: 'avisou24h', rotulo: 'Avisou 24h', lista: SIM_NAO, largura: 105 },
   { chave: 'data', rotulo: 'Data', data: true, largura: 140 },

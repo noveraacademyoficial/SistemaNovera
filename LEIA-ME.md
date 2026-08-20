@@ -98,12 +98,16 @@ Se a Olivia mudar algo na tela dela, quem estiver logado como `davi` vê a alter
 aparecer sem precisar recarregar. A atualização nunca acontece enquanto você está
 digitando ou com uma janela aberta, para não atropelar a edição.
 
-**Remarcações** — Name, Aula feita (era "Ativa" na planilha original — renomeei
-para bater com o campo de mesmo nome da aba Aulas), Avisou 24h, Data, Dia da
-semana, Horário, Marcação Olivia, Mês e Observação: os campos exatamente como na
-planilha "Remarcação dos alunos" que você mandou, todos editáveis. Ordenada só
-por **horário** (não mais por dia da semana primeiro, já que cada linha é um
-encontro numa data específica), com um filtro de **mês** no topo da tela.
+**Remarcações** — Name (campo de texto livre — digite o nome à mão; a lista de
+alunos já cadastrados aparece como sugestão de autocompletar, mas não é
+obrigatório escolher um deles), Aula feita (era "Ativa" na planilha original —
+renomeei para bater com o campo de mesmo nome da aba Aulas), Avisou 24h, Data,
+Dia da semana, Horário, Marcação Olivia, Mês e Observação: os campos exatamente
+como na planilha "Remarcação dos alunos" que você mandou, todos editáveis.
+Ordenada só por **horário** (não mais por dia da semana primeiro, já que cada
+linha é um encontro numa data específica), com filtro de **mês** e de **dia da
+semana** no topo da tela — os dois se combinam (ex.: Agosto + Quinta mostra só
+as remarcações de quinta-feira de agosto, da mais cedo para a mais tarde).
 
 **Aula experimental** (só Olivia) — Name, Data, Dia Semana, Feito, Horário, Level,
 Msg. Antes da Aula, Msg. Contato Recebido, Observação e Qtd Aulas: os campos da

@@ -17,6 +17,7 @@ const estado = {
   subaba: 'aulas',
   diaFiltro: '',
   mesFiltroProfessor: '',
+  diaFiltroRemarcacao: '',
   mostrarRemovidos: false,
   gruposAbertos: [],   // por padrão, os grupos do menu vêm todos fechados
   menuRecolhido: false,
@@ -1461,6 +1462,11 @@ function campoProfessor(registro, campo, conjunto, id) {
       ${nomes.map(nm => `<option${nm === valor ? ' selected' : ''}>${esc(nm)}</option>`).join('')}
       ${desconhecido ? `<option selected>${esc(valor)}</option>` : ''}</select>`;
   }
+  // Texto livre (digita o nome à mão), com sugestão dos alunos já cadastrados
+  // — diferente de listaAlunos, aqui não é obrigatório escolher um da lista.
+  if (campo.autocompleteAlunos) {
+    return `<input ${base} list="lista-nomes-alunos-professor" value="${esc(valor || '')}" autocomplete="off" placeholder="Digite o nome">`;
+  }
   if (campo.lista || campo.listaGlobal) {
     // listaGlobal lê a lista de Listas e opções (ex.: Status), em vez de uma lista fixa —
     // assim o Cadastro de alunos e as telas de professor sempre mostram as mesmas opções
@@ -1573,10 +1579,15 @@ function abaProfessor(professor) {
 
   // Remarcações e Aula experimental: ordenadas só por horário (não por dia da semana,
   // já que aqui cada linha é um encontro numa data específica) e com filtro de mês.
+  // Remarcações também tem filtro de dia da semana — os dois se combinam (ex.: Agosto + Quinta).
   const temFiltroMes = subaba === 'remarcacoes' || subaba === 'experimental';
+  const temFiltroDia = subaba === 'remarcacoes';
   let linhas = estado.dados[conjunto].filter(x => String(x.professor || '') === professor);
   if (temFiltroMes && estado.mesFiltroProfessor) {
     linhas = linhas.filter(r => mesDoRegistroProfessor(subaba, r) === estado.mesFiltroProfessor);
+  }
+  if (temFiltroDia && estado.diaFiltroRemarcacao) {
+    linhas = linhas.filter(r => r.diaSemana === estado.diaFiltroRemarcacao);
   }
   linhas = temFiltroMes ? ordenarPorHorario(linhas, 'horario') : ordenarPorDiaEHorario(linhas, 'diaSemana', 'horario');
 
@@ -1585,9 +1596,18 @@ function abaProfessor(professor) {
     ${MESES.map((m, i) => `<button class="${estado.mesFiltroProfessor === i + 1 ? 'ativo' : ''}" data-acao="filtro-mes-professor" data-mes="${i + 1}">${esc(m.slice(0, 3))}</button>`).join('')}
   </div>` : '';
 
-  const rotuloNovo = { remarcacoes: '+ Nova remarcação', experimental: '+ Nova aula experimental', dadosAulas: '+ Novo mês', bancoDados: '+ Novo registro' }[subaba];
+  const filtroDiaSemana = temFiltroDia ? `<div class="filtro-dias" style="margin-bottom:14px">
+    <button class="${estado.diaFiltroRemarcacao === '' ? 'ativo' : ''}" data-acao="filtro-dia-remarcacao" data-dia="">Todos os dias</button>
+    ${DIAS_SEMANA.map(d => `<button class="${estado.diaFiltroRemarcacao === d ? 'ativo' : ''}" data-acao="filtro-dia-remarcacao" data-dia="${esc(d)}">${esc(d)}</button>`).join('')}
+  </div>` : '';
 
-  return navegacao + filtroMes + `
+  const rotuloNovo = { remarcacoes: '+ Nova remarcação', experimental: '+ Nova aula experimental', dadosAulas: '+ Novo mês', bancoDados: '+ Novo registro' }[subaba];
+  // Sugestões para o campo Nome (texto livre) — só existe onde algum campo usa autocompleteAlunos.
+  const temCampoAutocomplete = campos.some(c => c.autocompleteAlunos);
+  const listaSugestoesNomes = temCampoAutocomplete
+    ? `<datalist id="lista-nomes-alunos-professor">${alunosDoProfessorAtual().map(a => `<option value="${esc(a.nome)}"></option>`).join('')}</datalist>` : '';
+
+  return navegacao + filtroMes + filtroDiaSemana + listaSugestoesNomes + `
     <div class="barra-acoes">
       <button class="botao" data-acao="novo-registro-professor" data-conjunto="${conjunto}">${esc(rotuloNovo)}</button>
       <span class="espaco"></span>
@@ -2135,6 +2155,7 @@ async function tratarClique(ev) {
   else if (acao === 'subaba-professor') { estado.subaba = alvo.dataset.subaba; desenhar(); }
   else if (acao === 'filtro-dia') { estado.diaFiltro = alvo.dataset.dia; desenhar(); }
   else if (acao === 'filtro-mes-professor') { estado.mesFiltroProfessor = alvo.dataset.mes ? Number(alvo.dataset.mes) : ''; desenhar(); }
+  else if (acao === 'filtro-dia-remarcacao') { estado.diaFiltroRemarcacao = alvo.dataset.dia; desenhar(); }
   else if (acao === 'filtro-dashboard-professor-aulas') { estado.dashboardProfessorAulas = alvo.dataset.professor; desenhar(); }
   else if (acao === 'nova-aula-avulsa') {
     alterar('aulas', lista => lista.push({
