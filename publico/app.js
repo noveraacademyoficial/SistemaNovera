@@ -2281,6 +2281,7 @@ async function tratarClique(ev) {
   }
   else if (acao === 'remover-registro-professor') {
     const conjunto = alvo.dataset.conjunto;
+    const professor = professorDaAba();
     const registro = estado.dados[conjunto].find(x => x.id === alvo.dataset.id);
     const ok = await confirmarExclusao('Excluir registro',
       `Você está excluindo este registro de <strong>${esc({ remarcacoes: 'remarcação', experimentais: 'aula experimental', dadosAulas: 'dados das aulas' }[conjunto] || 'registro')}</strong>` +
@@ -2290,6 +2291,13 @@ async function tratarClique(ev) {
       const i = lista.findIndex(x => x.id === alvo.dataset.id);
       if (i >= 0) lista.splice(i, 1);
     });
+    // Espelha o ajuste automático de criação/edição: excluir uma remarcação que
+    // estava contando como feita tem que tirar o +1 dela do gráfico Aulas do mês
+    // (os gráficos "por dia", tanto de Remarcações quanto de Aula experimental,
+    // são calculados ao vivo a partir da lista e já refletem a exclusão sozinhos).
+    if (conjunto === 'remarcacoes' && professor === PROFESSOR_COM_CONTADOR_MENSAL && registro && registro.ativa === 'Sim') {
+      ajustarContagemMensal(professor, -1, 'remarcacao');
+    }
   }
   else if (acao === 'remover-aluno-professor') {
     const chave = alvo.dataset.id;

@@ -161,8 +161,12 @@ contador acumulado com duas origens possíveis:
 - Esse ajuste automático não é só de edição: **criar uma linha nova já com "Aula
   feita" = Sim** (pela janela flutuante de "+ Nova linha" ou "+ Nova remarcação")
   soma o **+1** correspondente na hora da criação, sem precisar editar o campo
-  de novo depois. Excluir uma linha, por outro lado, **não** desconta — se a
-  linha excluída estava contando como feita, corrija o total pelo botão manual
+  de novo depois. **Excluir uma linha de Remarcações** que estava com "Aula feita"
+  = Sim também desconta o **−1** correspondente na hora da exclusão, pelo mesmo
+  motivo — sem isso, o total ficaria contando uma remarcação que não existe mais.
+  Excluir uma linha da aba **Aulas**, por outro lado, não desconta (ali a linha só
+  sai da lista, o aluno continua no Cadastro — não é o mesmo tipo de exclusão
+  definitiva); se for necessário corrigir por causa disso, use o botão manual
   abaixo.
 - Nenhuma das duas somas pede senha — é só o reflexo automático de uma edição que a
   própria Olivia já pode fazer. Os demais meses (passados ou futuros) só têm valor
