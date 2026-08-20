@@ -147,9 +147,21 @@ function ordenarPorDiaEHorario(lista, campoDia = 'dia', campoHora = 'horario') {
     (minutosDoHorario(a[campoHora]) - minutosDoHorario(b[campoHora])) ||
     String(a.aluno || '').localeCompare(String(b.aluno || ''), 'pt-BR'));
 }
-/** Ordena só pelo horário (sem considerar o dia) — usado em Remarcações e Aula experimental. */
+/** Ordena só pelo horário (sem considerar o dia) — usado em Aula experimental. */
 function ordenarPorHorario(lista, campoHora = 'horario') {
   return lista.slice().sort((a, b) =>
+    (minutosDoHorario(a[campoHora]) - minutosDoHorario(b[campoHora])) ||
+    String(a.aluno || '').localeCompare(String(b.aluno || ''), 'pt-BR'));
+}
+/**
+ * Ordena por data (crescente) e, dentro do mesmo dia, por horário — usado em
+ * Remarcações, onde cada linha é um encontro numa data específica (a data em
+ * si é "aaaa-mm-dd", então comparar como texto já ordena certo). Sem data
+ * preenchida fica no início.
+ */
+function ordenarPorDataEHorario(lista, campoData = 'data', campoHora = 'horario') {
+  return lista.slice().sort((a, b) =>
+    String(a[campoData] || '').localeCompare(String(b[campoData] || '')) ||
     (minutosDoHorario(a[campoHora]) - minutosDoHorario(b[campoHora])) ||
     String(a.aluno || '').localeCompare(String(b.aluno || ''), 'pt-BR'));
 }

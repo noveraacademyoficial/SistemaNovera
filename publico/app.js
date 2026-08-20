@@ -1577,8 +1577,9 @@ function abaProfessor(professor) {
 
   if (subaba === 'aulas') return navegacao + telaAulas(professor, campos);
 
-  // Remarcações e Aula experimental: ordenadas só por horário (não por dia da semana,
-  // já que aqui cada linha é um encontro numa data específica) e com filtro de mês.
+  // Remarcações: ordenada por data crescente e, dentro do mesmo dia, por horário.
+  // Aula experimental: ordenada só por horário (não por dia da semana, já que aqui
+  // cada linha é um encontro numa data específica). Ambas com filtro de mês;
   // Remarcações também tem filtro de dia da semana — os dois se combinam (ex.: Agosto + Quinta).
   const temFiltroMes = subaba === 'remarcacoes' || subaba === 'experimental';
   const temFiltroDia = subaba === 'remarcacoes';
@@ -1589,7 +1590,9 @@ function abaProfessor(professor) {
   if (temFiltroDia && estado.diaFiltroRemarcacao) {
     linhas = linhas.filter(r => r.diaSemana === estado.diaFiltroRemarcacao);
   }
-  linhas = temFiltroMes ? ordenarPorHorario(linhas, 'horario') : ordenarPorDiaEHorario(linhas, 'diaSemana', 'horario');
+  linhas = subaba === 'remarcacoes' ? ordenarPorDataEHorario(linhas, 'data', 'horario')
+    : temFiltroMes ? ordenarPorHorario(linhas, 'horario')
+    : ordenarPorDiaEHorario(linhas, 'diaSemana', 'horario');
 
   const filtroMes = temFiltroMes ? `<div class="filtro-dias" style="margin-bottom:14px">
     <button class="${estado.mesFiltroProfessor === '' ? 'ativo' : ''}" data-acao="filtro-mes-professor" data-mes="">Todos os meses</button>
