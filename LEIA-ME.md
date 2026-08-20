@@ -116,8 +116,9 @@ mais antiga para a mais recente).
 
 **Aula experimental** (só Olivia) — Name, Data, Dia Semana, Feito, Horário, Level,
 Msg. Antes da Aula, Msg. Contato Recebido, Observação e Qtd Aulas: os campos da
-planilha "Aula experimental", também todos editáveis. Ordenada por **dia da
-semana** e, dentro do dia, por **horário** (igual à aba Aulas), com filtro de
+planilha "Aula experimental", também todos editáveis. Ordenada por **data**
+(crescente) e, dentro do mesmo dia, por **horário** — igual a Remarcações,
+já que cada linha também é um encontro numa data específica — com filtro de
 **mês** (aqui, como não existe um campo "Mês" pronto, o mês é lido a partir da
 Data) e de **dia da semana**, combináveis do mesmo jeito que em Remarcações.
 No topo da tela, um gráfico de rosca **"Aula experimental"** mostra a
@@ -192,6 +193,11 @@ da aba Remarcações) — para visualizar rapidamente onde as remarcações se c
 A contagem é sempre restrita ao **mês atual** (campo "Mês" da linha de remarcação):
 o gráfico não soma o histórico inteiro, só o mês corrente — passa a virar do zero
 quando o mês vira.
+
+Do lado dele, o gráfico **"Aula experimental por dia"** faz a mesma coisa para as
+aulas experimentais: uma barra por dia da semana, contando só as do **mês atual**
+(mês lido a partir da Data, já que a aba Aula experimental não tem um campo "Mês"
+pronto) — mesma lógica de "Remarcações por dia", sem somar o histórico inteiro.
 
 O gráfico "Aulas do mês" aparece copiado na **Visão Geral** (ver abaixo), junto com uma
 versão só para o Davi. O KPI "Aulas marcadas como feitas" saiu da tela da Olivia

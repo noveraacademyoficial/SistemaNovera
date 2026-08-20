@@ -279,6 +279,11 @@ function remarcacoesPorDia(lista) {
   return DIAS_SEMANA.map(dia => ({ rotulo: dia, valor: lista.filter(r => r.diaSemana === dia).length }));
 }
 
+/** Distribuição das aulas experimentais do professor por dia da semana (campo "Dia Semana"). */
+function experimentaisPorDia(lista) {
+  return DIAS_SEMANA.map(dia => ({ rotulo: dia, valor: lista.filter(r => r.diaSemana === dia).length }));
+}
+
 /** Distribuição das aulas experimentais (só Olivia) pelo campo "Feito". */
 function experimentaisPorStatus(lista) {
   const feitas = lista.filter(e => e.feito === 'Sim').length;

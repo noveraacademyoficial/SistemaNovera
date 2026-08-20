@@ -1649,7 +1649,7 @@ function abaProfessor(professor) {
   if (temFiltroDia && estado.diaFiltroProfessor) {
     linhas = linhas.filter(r => r.diaSemana === estado.diaFiltroProfessor);
   }
-  linhas = subaba === 'remarcacoes' ? ordenarPorDataEHorario(linhas, 'data', 'horario')
+  linhas = (subaba === 'remarcacoes' || subaba === 'experimental') ? ordenarPorDataEHorario(linhas, 'data', 'horario')
     : ordenarPorDiaEHorario(linhas, 'diaSemana', 'horario');
 
   const filtroMes = temFiltroMes ? `<div class="filtro-dias" style="margin-bottom:14px">
@@ -1719,11 +1719,17 @@ function telaAulas(professor, campos) {
 
   const comContadorMensal = professor === PROFESSOR_COM_CONTADOR_MENSAL;
   const graficoMensal = comContadorMensal ? graficoAulasMensais(professor) : '';
-  const mesAtualNome = MESES[paraData(estado.calc.hoje).getUTCMonth()];
+  const hojeAulas = paraData(estado.calc.hoje);
+  const mesAtualNome = MESES[hojeAulas.getUTCMonth()];
+  const mesAtualNumero = hojeAulas.getUTCMonth() + 1;
   const remarcacoesDoMesAtual = comContadorMensal
     ? estado.dados.remarcacoes.filter(r => String(r.professor || '') === professor && r.mes === mesAtualNome) : [];
   const graficoRemarcacoes = comContadorMensal
     ? graficoColunas('REMARCAÇÕES POR DIA', remarcacoesPorDia(remarcacoesDoMesAtual), { cor: 'var(--amarelo)' }) : '';
+  const experimentaisDoMesAtual = comContadorMensal
+    ? estado.dados.experimentais.filter(r => String(r.professor || '') === professor && mesDoRegistroProfessor('experimental', r) === mesAtualNumero) : [];
+  const graficoExperimentalPorDia = comContadorMensal
+    ? graficoColunas('AULA EXPERIMENTAL POR DIA', experimentaisPorDia(experimentaisDoMesAtual), { cor: 'var(--azul)' }) : '';
 
   return `
     ${filtroDias}
@@ -1740,6 +1746,7 @@ function telaAulas(professor, campos) {
       ${graficoColunas('ALUNOS POR HORÁRIO', alunosPorHorario(lista), { cor: 'var(--roxo-medio)' })}
       ${graficoMensal}
       ${graficoRemarcacoes}
+      ${graficoExperimentalPorDia}
     </div>
 
     <div class="barra-acoes">
