@@ -81,11 +81,16 @@ não aparecem aqui.**
   quem parece estar caminhando para um upgrade de plano, e alimenta um gráfico na
   Visão Geral (ver abaixo).
 - **Excluir uma linha** agora tira o aluno só **desta lista** — o Cadastro de alunos
-  não muda, e um botão **"Mostrar removidos"** deixa restaurar a qualquer momento.
+  não muda, mas essa remoção não tem mais um botão de desfazer dentro da tela (o botão
+  **"Mostrar removidos"** foi retirado); para trazer o aluno de volta é preciso usar
+  **+ Nova linha** de novo.
 
 A lista traz uma linha por aluno do professor: o Cadastro de alunos fornece o **valor
 inicial** de nome, dia, horário e status e, a partir da primeira edição, valem os
-valores desta tela. Use **+ Nova linha** para uma aula que não está no cadastro.
+valores desta tela. Use **+ Nova linha** (ou **+ Nova remarcação** / **+ Nova aula
+experimental**, conforme a aba) para uma aula que não está no cadastro — o clique abre
+uma **janela flutuante** para preencher os campos, sem precisar rolar a tabela até o
+fim para ver a linha nova depois de criada.
 
 Tudo vem **ordenado do primeiro dia da semana para o último** e, dentro do dia, do
 primeiro horário — nas Aulas, nas Remarcações e nas Aulas experimentais. Há um filtro
@@ -135,11 +140,15 @@ contador acumulado com duas origens possíveis:
 
 - Marcar a coluna **Aula feita** de uma linha normal como **Sim** soma **+1** no
   total do mês atual (origem "aula normal", verde); voltar para **Não** tira **−1**.
+  Deixar o campo **em branco** (nem Sim, nem Não) **nunca** soma nem tira do total,
+  não importa qual era o valor anterior — é só um jeito de marcar "ainda sem resposta"
+  sem mexer no gráfico.
 - Quando o **Status** de uma linha é **Remarcação**, o campo "Aula feita" dessa
   linha fica **travado** (nem aparece mais como editável) — quem conta como feita
   ali é a linha correspondente na aba **Remarcações**: marcar o campo **Aula feita**
   dela (era "Ativa" na planilha original) como **Sim** também soma **+1** no mesmo
-  total do mês (origem "remarcação"), e volta **−1** ao desmarcar. Essa parte da
+  total do mês (origem "remarcação"), e volta **−1** ao desmarcar — e, do mesmo jeito,
+  deixar **em branco** nunca altera o total. Essa parte da
   barra aparece destacada em **amarelo**, com legenda "Aula normal / Remarcação"
   abaixo do gráfico, para mostrar de onde veio cada aula.
 - Nenhuma das duas somas pede senha — é só o reflexo automático de uma edição que a
@@ -411,9 +420,12 @@ cada lado usa a própria escala, para que um mês fora da curva — como agosto 
 
 O rodapé de cada tela repete essa legenda.
 
-Logo abaixo dos gráficos operacionais, um card **PROFESSORES** traz mais dois,
-copiados/derivados das telas de professor: o gráfico **Aulas do mês** e
-**Valor Mês Seguinte — Davi**, com os alunos dele que têm esse campo preenchido.
+Logo abaixo dos gráficos operacionais, um card **PROFESSORES** traz mais três,
+copiados/derivados das telas de professor: o gráfico **Aulas do mês**,
+**Valor Mês Seguinte — Davi** (com os alunos dele que têm esse campo preenchido) e
+**Aula experimental — Olivia** — uma rosca com a distribuição das aulas experimentais
+dela pelo campo "Feito" (Feito / Não feito / Aguardando, esse último para quando o
+campo ainda está em branco).
 
 O gráfico **Aulas do mês** tem um filtro **Davi / Olivia** no próprio card:
 

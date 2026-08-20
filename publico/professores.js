@@ -279,6 +279,16 @@ function remarcacoesPorDia(lista) {
   return DIAS_SEMANA.map(dia => ({ rotulo: dia, valor: lista.filter(r => r.diaSemana === dia).length }));
 }
 
+/** Distribuição das aulas experimentais (só Olivia) pelo campo "Feito". */
+function experimentaisPorStatus(lista) {
+  const feitas = lista.filter(e => e.feito === 'Sim').length;
+  const naoFeitas = lista.filter(e => e.feito === 'Não').length;
+  const semStatus = lista.length - feitas - naoFeitas;
+  const itens = [{ rotulo: 'Feito', valor: feitas }, { rotulo: 'Não feito', valor: naoFeitas }];
+  if (semStatus > 0) itens.push({ rotulo: 'Aguardando', valor: semStatus });
+  return itens;
+}
+
 /** Distribuição por faixa de horário. */
 function alunosPorHorario(lista) {
   return FAIXAS_HORARIO.map(faixa => ({

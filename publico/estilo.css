@@ -601,7 +601,7 @@ input:disabled, select:disabled { opacity: .5; cursor: not-allowed; background: 
 }
 .botao.excluir:hover { background: #D92D20; border-color: #D92D20; }
 
-.janela-formulario { text-align: left; margin-bottom: 4px; }
+.janela-formulario { text-align: left; margin-bottom: 4px; max-height: 55vh; overflow-y: auto; padding-right: 4px; }
 .janela-formulario .filtro { margin-bottom: 0; }
 .janela-formulario label + label { margin-top: 10px; }
 

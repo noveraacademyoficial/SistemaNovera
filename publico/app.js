@@ -18,7 +18,6 @@ const estado = {
   diaFiltro: '',
   mesFiltroProfessor: '',
   diaFiltroRemarcacao: '',
-  mostrarRemovidos: false,
   gruposAbertos: [],   // por padrão, os grupos do menu vêm todos fechados
   menuRecolhido: false,
   versaoDados: '',
@@ -820,6 +819,7 @@ function abaDashboard() {
         <div class="grade-graficos" style="margin-bottom:0">
           ${estado.dashboardProfessorAulas === 'Davi' ? graficoAulasFeitasDavi() : graficoAulasMensais('Olivia')}
           ${graficoBarras('VALOR MÊS SEGUINTE — DAVI', valoresMesSeguinte(estado.dados.aulas.filter(a => a.professor === 'Davi')), { mostrarZeros: true, cor: 'var(--amarelo)', formatar: moeda })}
+          ${graficoRosca('AULA EXPERIMENTAL — OLIVIA', experimentaisPorStatus(estado.dados.experimentais), { centroRotulo: 'aulas' })}
         </div>
         <p class="legenda" style="margin-bottom:0">
           <strong>Aulas do mês</strong> mostra a Olivia (mesmo gráfico acumulado da tela dela: marcar "Aula feita" como Sim
@@ -828,6 +828,8 @@ function abaDashboard() {
           aulas dele estão com "Aula feita = Sim" agora; os demais meses ficam em branco).
           <strong>Valor Mês Seguinte</strong> é um campo livre que o Davi preenche por aluno, sem ligação com a mensalidade
           nem com nenhuma outra coluna — serve só para sinalizar quem pode estar fazendo upgrade de plano.
+          <strong>Aula experimental</strong> mostra quantas aulas experimentais da Olivia já foram feitas, quais não, e
+          quantas ainda aguardam (campo "Feito" em branco).
         </p>
       </div>
     </section>`;
@@ -1483,6 +1485,62 @@ function campoProfessor(registro, campo, conjunto, id) {
   return `<input ${base} value="${esc(valor || '')}">`;
 }
 
+/**
+ * Mesma ideia de campoProfessor, mas para dentro do formulário do modal de
+ * "novo registro" (abrirModalNovoRegistro): usa name="chave" em vez de
+ * data-acao, porque aqui não existe id ainda — o registro só é criado quando
+ * o formulário é confirmado. O seletor de dias vira texto livre (ex.:
+ * "Segunda, Quarta") para não depender do popup de dias, que é ligado a um
+ * registro já existente.
+ */
+function campoFormularioCriacao(campo, valor) {
+  const nome = `name="${esc(campo.chave)}"`;
+  if (campo.diasMultiplos) {
+    return `<input ${nome} value="${esc(valor || '')}" placeholder="Ex.: Segunda, Quarta">`;
+  }
+  if (campo.listaAlunos) {
+    const nomes = alunosDoProfessorAtual().map(a => a.nome);
+    return `<select ${nome}><option value=""></option>
+      ${nomes.map(nm => `<option${nm === valor ? ' selected' : ''}>${esc(nm)}</option>`).join('')}</select>`;
+  }
+  if (campo.autocompleteAlunos) {
+    return `<input ${nome} list="lista-nomes-alunos-professor" value="${esc(valor || '')}" autocomplete="off" placeholder="Digite o nome">`;
+  }
+  if (campo.lista || campo.listaGlobal) {
+    const opcoesLista = campo.listaGlobal ? (estado.dados.opcoes[campo.listaGlobal] || []) : campo.lista;
+    return `<select ${nome}><option value=""></option>
+      ${opcoesLista.map(o => `<option${o === valor ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  }
+  if (campo.data) return `<input type="date" ${nome} value="${esc(valor || '')}">`;
+  if (campo.hora) return `<input type="time" ${nome} value="${esc(valor || '')}">`;
+  if (campo.mes) return `<input type="month" ${nome} value="${esc((valor || '').slice(0, 7))}">`;
+  if (campo.numero) return `<input class="num" ${nome} value="${esc(paraEntrada(valor))}">`;
+  return `<input ${nome} value="${esc(valor || '')}">`;
+}
+
+/**
+ * Abre um popup para preencher e criar uma linha nova — em vez de nascer em
+ * branco no fim (às vezes bem longa) da tabela, obrigando rolar até lá para
+ * ver e preencher. `valoresIniciais` são os padrões (mesmos de antes); ao
+ * confirmar, `aoSalvar(registroPreenchido)` grava o registro já completo.
+ */
+async function abrirModalNovoRegistro({ titulo, campos, valoresIniciais, aoSalvar }) {
+  const camposHtml = campos.map(c => `<label class="filtro"><span>${esc(c.rotulo)}</span>
+    ${campoFormularioCriacao(c, valoresIniciais[c.chave])}</label>`).join('');
+
+  await abrirJanelaFormulario({
+    titulo, icone: '➕', camposHtml, rotuloConfirmar: 'Criar',
+    aoConfirmar: async dados => {
+      const registro = { ...valoresIniciais };
+      campos.forEach(c => {
+        const bruto = dados[c.chave];
+        registro[c.chave] = c.numero ? parseNumero(bruto) : bruto;
+      });
+      await aoSalvar(registro);
+    },
+  });
+}
+
 function professorDaAba() {
   return (ABAS_PROFESSOR.find(a => a.id === estado.aba) || {}).professor || '';
 }
@@ -1529,13 +1587,14 @@ function gravarCampoProfessor(conjunto, chave, campo, valor, redesenhar = true) 
   // ou tira 1 do total do mês corrente (origem "normal"); marcar/desmarcar "Aula feita"
   // (chave "ativa") numa linha de Remarcações faz o mesmo, mas com origem "remarcacao" —
   // nenhum dos dois pede senha, é só o reflexo automático de uma edição que o(a)
-  // próprio(a) professor(a) já pode fazer.
-  if (conjunto === 'aulas' && campo === 'aulaFeita' && professor === PROFESSOR_COM_CONTADOR_MENSAL) {
+  // próprio(a) professor(a) já pode fazer. Deixar o campo em branco (vazio) nunca mexe
+  // no gráfico, nem para somar nem para tirar — só a escolha explícita de Sim ou Não conta.
+  if (conjunto === 'aulas' && campo === 'aulaFeita' && professor === PROFESSOR_COM_CONTADOR_MENSAL && conteudo !== '') {
     const eraFeita = valorAnterior === 'Sim';
     const ficouFeita = conteudo === 'Sim';
     if (eraFeita !== ficouFeita) ajustarContagemMensal(professor, ficouFeita ? 1 : -1, 'normal');
   }
-  else if (conjunto === 'remarcacoes' && campo === 'ativa' && professor === PROFESSOR_COM_CONTADOR_MENSAL) {
+  else if (conjunto === 'remarcacoes' && campo === 'ativa' && professor === PROFESSOR_COM_CONTADOR_MENSAL && conteudo !== '') {
     const eraAtiva = valorAnterior === 'Sim';
     const ficouAtiva = conteudo === 'Sim';
     if (eraAtiva !== ficouAtiva) ajustarContagemMensal(professor, ficouAtiva ? 1 : -1, 'remarcacao');
@@ -1612,7 +1671,7 @@ function abaProfessor(professor) {
 
   return navegacao + filtroMes + filtroDiaSemana + listaSugestoesNomes + `
     <div class="barra-acoes">
-      <button class="botao" data-acao="novo-registro-professor" data-conjunto="${conjunto}">${esc(rotuloNovo)}</button>
+      <button class="botao" data-acao="novo-registro-professor" data-conjunto="${conjunto}" data-subaba="${esc(subaba)}">${esc(rotuloNovo)}</button>
       <span class="espaco"></span>
       <span style="font-size:12.5px;color:var(--texto-suave)">${linhas.length} registro(s)</span>
     </div>
@@ -1640,8 +1699,6 @@ function abaProfessor(professor) {
 
 function telaAulas(professor, campos) {
   const todasDoProfessor = aulasDoProfessor(estado.dados.alunos, estado.dados.aulas, professor);
-  const removidas = aulasDoProfessor(estado.dados.alunos, estado.dados.aulas, professor, true)
-    .filter(a => a.removida);
 
   const termo = estado.busca.trim().toLowerCase();
   const CAMPOS_BUSCAVEIS = ['aluno', 'level', 'dia', 'horario', 'status', 'observacao'];
@@ -1685,7 +1742,6 @@ function telaAulas(professor, campos) {
       <button class="botao" data-acao="nova-aula-avulsa">+ Nova linha</button>
       <input class="busca" placeholder="Buscar aluno…" data-acao="busca" value="${esc(estado.busca)}">
       <span class="espaco"></span>
-      ${removidas.length ? `<button class="botao claro mini" data-acao="alternar-removidos">${estado.mostrarRemovidos ? 'Ocultar' : 'Mostrar'} removidos (${removidas.length})</button>` : ''}
       <span style="font-size:12.5px;color:var(--texto-suave)">ordenado por dia da semana e horário</span>
     </div>
 
@@ -1703,26 +1759,12 @@ function telaAulas(professor, campos) {
       </table></div></div>
     </section>
 
-    ${estado.mostrarRemovidos && removidas.length ? `
-    <section class="cartao">
-      <header>ALUNOS REMOVIDOS DESTA LISTA <span style="font-weight:400;font-size:11.5px">saíram só daqui — o Cadastro de alunos não foi alterado</span></header>
-      <div class="corpo sem-espaco"><div class="rolagem"><table>
-        <thead><tr><th>Aluno</th><th style="width:110px"></th></tr></thead>
-        <tbody>
-          ${removidas.map(l => `<tr>
-            <td>${esc(l.aluno)}</td>
-            <td><button class="botao claro mini" data-acao="restaurar-aluno-professor" data-id="${esc(l.id)}">↺ Restaurar</button></td>
-          </tr>`).join('')}
-        </tbody>
-      </table></div></div>
-    </section>` : ''}
-
     <p class="legenda">
       <strong>Todas as colunas são editáveis e pertencem só a esta tela.</strong> Cada professor tem a própria lista:
       alterar aqui não muda o Cadastro de alunos nem a tela do outro professor.<br>
       As linhas nascem do Cadastro de alunos com nome, dia, horário e status como ponto de partida; a partir da primeira edição
-      valem os valores desta tela. Excluir uma linha só a tira <strong>desta lista</strong> — o aluno continua no Cadastro e
-      pode ser restaurado a qualquer momento. Use <strong>+ Nova linha</strong> para uma aula que não está no cadastro.
+      valem os valores desta tela. Excluir uma linha só a tira <strong>desta lista</strong> — o aluno continua no Cadastro de
+      alunos normalmente. Use <strong>+ Nova linha</strong> para uma aula que não está no cadastro.
       Valores de mensalidade não aparecem nesta tela.
       ${comContadorMensal ? `<br><strong>Aulas do mês</strong> — marcar "Aula feita" como Sim soma +1 no mês atual (verde);
       voltar para Não tira −1. Quando o Status de uma linha é <strong>Remarcação</strong>, o campo "Aula feita" fica travado —
@@ -2002,7 +2044,7 @@ async function tratarClique(ev) {
   if (ev.target.closest('#voltar')) { estado.aba = 'dashboard'; estado.busca = ''; desenhar(); return; }
 
   const botaoAba = ev.target.closest('[data-aba]');
-  if (botaoAba) { estado.aba = botaoAba.dataset.aba; estado.busca = ''; estado.mostrarRemovidos = false; desenhar(); return; }
+  if (botaoAba) { estado.aba = botaoAba.dataset.aba; estado.busca = ''; desenhar(); return; }
 
   const alvo = ev.target.closest('[data-acao]');
   if (!alvo) return;
@@ -2161,25 +2203,42 @@ async function tratarClique(ev) {
   else if (acao === 'filtro-dia-remarcacao') { estado.diaFiltroRemarcacao = alvo.dataset.dia; desenhar(); }
   else if (acao === 'filtro-dashboard-professor-aulas') { estado.dashboardProfessorAulas = alvo.dataset.professor; desenhar(); }
   else if (acao === 'nova-aula-avulsa') {
-    alterar('aulas', lista => lista.push({
-      id: novoId('au'), professor: professorDaAba(), alunoId: null, removida: false,
-      aluno: '', level: '', dia: '', horario: '', status: 'Ativo', observacao: '',
-      nApresentacao: null, pagSlide: null, qtdAula: null, valorMesSeguinte: null,
-      scriptFeito: '', scriptModelo: '', aulaFeita: '',
-    }));
+    const professor = professorDaAba();
+    await abrirModalNovoRegistro({
+      titulo: 'Nova aula',
+      campos: camposAulaPara(professor),
+      valoresIniciais: {
+        aluno: '', level: '', dia: '', horario: '', status: 'Ativo', observacao: '',
+        nApresentacao: null, pagSlide: null, qtdAula: null, valorMesSeguinte: null,
+        scriptFeito: '', scriptModelo: '', aulaFeita: '',
+      },
+      aoSalvar: async registro => {
+        alterar('aulas', lista => lista.push({
+          id: novoId('au'), professor, alunoId: null, removida: false, ...registro,
+        }));
+      },
+    });
   }
   else if (acao === 'novo-registro-professor') {
     const conjunto = alvo.dataset.conjunto;
+    const subaba = alvo.dataset.subaba;
     const professor = professorDaAba();
     const hoje = paraData(estado.calc.hoje);
-    const base = { id: novoId('r'), professor, observacao: '' };
-    const iniciais = {
-      remarcacoes: { aluno: '', ativa: 'Não', avisou24h: 'Não', data: hojeISO(), diaSemana: '', horario: '', marcacaoOlivia: 'Não', mes: MESES[hoje.getUTCMonth()] },
-      experimentais: { aluno: '', data: hojeISO(), diaSemana: '', feito: 'Não', horario: '', level: '', msgAntes: 'Não', msgContatoRecebido: 'Não', qtdAulas: 0 },
-      dadosAulas: { mes: MESES[hoje.getUTCMonth()], ano: hoje.getUTCFullYear(), bancoHoras: 0, mensalidade: 0, pago: 'Não', dataRelatorio: '', relatorioEntregue: 'Não' },
-      bancoDados: { titulo: '', categoria: '', data: hojeISO(), valor: 0 },
+    const valoresIniciais = {
+      remarcacoes: { aluno: '', ativa: 'Não', avisou24h: 'Não', data: hojeISO(), diaSemana: '', horario: '', marcacaoOlivia: 'Não', mes: MESES[hoje.getUTCMonth()], observacao: '' },
+      experimentais: { aluno: '', data: hojeISO(), diaSemana: '', feito: 'Não', horario: '', level: '', msgAntes: 'Não', msgContatoRecebido: 'Não', qtdAulas: 0, observacao: '' },
+      dadosAulas: { mes: MESES[hoje.getUTCMonth()], ano: hoje.getUTCFullYear(), bancoHoras: 0, mensalidade: 0, pago: 'Não', dataRelatorio: '', relatorioEntregue: 'Não', observacao: '' },
+      bancoDados: { titulo: '', categoria: '', data: hojeISO(), valor: 0, observacao: '' },
     }[conjunto] || {};
-    alterar(conjunto, lista => lista.push({ ...base, ...iniciais }));
+    const tituloModal = { remarcacoes: 'Nova remarcação', experimentais: 'Nova aula experimental', dadosAulas: 'Novo mês', bancoDados: 'Novo registro' }[conjunto] || 'Novo registro';
+    await abrirModalNovoRegistro({
+      titulo: tituloModal,
+      campos: camposDaSubaba(subaba, professor),
+      valoresIniciais,
+      aoSalvar: async registro => {
+        alterar(conjunto, lista => lista.push({ id: novoId('r'), professor, ...registro }));
+      },
+    });
   }
   else if (acao === 'remover-registro-professor') {
     const conjunto = alvo.dataset.conjunto;
@@ -2193,10 +2252,6 @@ async function tratarClique(ev) {
       if (i >= 0) lista.splice(i, 1);
     });
   }
-  else if (acao === 'alternar-removidos') {
-    estado.mostrarRemovidos = !estado.mostrarRemovidos;
-    desenhar();
-  }
   else if (acao === 'remover-aluno-professor') {
     const chave = alvo.dataset.id;
     const professor = professorDaAba();
@@ -2204,7 +2259,7 @@ async function tratarClique(ev) {
       .find(l => (l.id || 'aluno:' + l.alunoId) === chave);
     const ok = await confirmarExclusao('Excluir desta lista',
       `Você está excluindo <strong>${esc(linha ? linha.aluno : 'este aluno')}</strong> só da sua lista de Aulas.` +
-      '<br>O Cadastro de alunos não é alterado, e você pode restaurar essa linha depois em "Mostrar removidos".');
+      '<br>O Cadastro de alunos não é alterado — só sai desta lista de Aulas.');
     if (!ok) return;
     alterar('aulas', lista => {
       if (chave.startsWith('aluno:')) {
@@ -2220,12 +2275,6 @@ async function tratarClique(ev) {
         const registro = lista.find(x => x.id === chave && String(x.professor || '') === professor);
         if (registro) registro.removida = true;
       }
-    });
-  }
-  else if (acao === 'restaurar-aluno-professor') {
-    alterar('aulas', lista => {
-      const registro = lista.find(x => x.id === alvo.dataset.id);
-      if (registro) registro.removida = false;
     });
   }
   else if (acao === 'editar-contagem-mensal') {
