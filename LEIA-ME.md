@@ -109,16 +109,22 @@ obrigatório escolher um deles), Aula feita (era "Ativa" na planilha original �
 renomeei para bater com o campo de mesmo nome da aba Aulas), Avisou 24h, Data,
 Dia da semana, Horário, Marcação Olivia, Mês e Observação: os campos exatamente
 como na planilha "Remarcação dos alunos" que você mandou, todos editáveis.
-Ordenada só por **horário** (não mais por dia da semana primeiro, já que cada
-linha é um encontro numa data específica), com filtro de **mês** e de **dia da
-semana** no topo da tela — os dois se combinam (ex.: Agosto + Quinta mostra só
-as remarcações de quinta-feira de agosto, da mais cedo para a mais tarde).
+Ordenada por **data** (crescente) e, dentro do mesmo dia, por **horário**, com
+filtro de **mês** e de **dia da semana** no topo da tela — os dois se combinam
+(ex.: Agosto + Quinta mostra só as remarcações de quinta-feira de agosto, da
+mais antiga para a mais recente).
 
 **Aula experimental** (só Olivia) — Name, Data, Dia Semana, Feito, Horário, Level,
 Msg. Antes da Aula, Msg. Contato Recebido, Observação e Qtd Aulas: os campos da
-planilha "Aula experimental", também todos editáveis. Mesma ordenação por
-horário e o mesmo filtro de mês (aqui, como não existe um campo "Mês" pronto,
-o mês é lido a partir da Data).
+planilha "Aula experimental", também todos editáveis. Ordenada por **dia da
+semana** e, dentro do dia, por **horário** (igual à aba Aulas), com filtro de
+**mês** (aqui, como não existe um campo "Mês" pronto, o mês é lido a partir da
+Data) e de **dia da semana**, combináveis do mesmo jeito que em Remarcações.
+No topo da tela, um gráfico de rosca **"Aula experimental"** mostra a
+distribuição de todas as aulas experimentais da Olivia pelo campo Feito
+(Feito / Não feito / Aguardando, esse último quando o campo está em branco) —
+o mesmo gráfico que já aparecia copiado na Visão Geral do Davi, agora também
+na tela dela.
 
 **Dados das Aulas** (só Davi) — um registro por mês: mês, ano, banco de horas,
 mensalidade, pago, data do relatório, relatório entregue, observação e
@@ -151,6 +157,12 @@ contador acumulado com duas origens possíveis:
   deixar **em branco** nunca altera o total. Essa parte da
   barra aparece destacada em **amarelo**, com legenda "Aula normal / Remarcação"
   abaixo do gráfico, para mostrar de onde veio cada aula.
+- Esse ajuste automático não é só de edição: **criar uma linha nova já com "Aula
+  feita" = Sim** (pela janela flutuante de "+ Nova linha" ou "+ Nova remarcação")
+  soma o **+1** correspondente na hora da criação, sem precisar editar o campo
+  de novo depois. Excluir uma linha, por outro lado, **não** desconta — se a
+  linha excluída estava contando como feita, corrija o total pelo botão manual
+  abaixo.
 - Nenhuma das duas somas pede senha — é só o reflexo automático de uma edição que a
   própria Olivia já pode fazer. Os demais meses (passados ou futuros) só têm valor
   quando alguém preenche manualmente pelo botão abaixo.

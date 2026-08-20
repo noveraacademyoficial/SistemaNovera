@@ -17,7 +17,7 @@ const estado = {
   subaba: 'aulas',
   diaFiltro: '',
   mesFiltroProfessor: '',
-  diaFiltroRemarcacao: '',
+  diaFiltroProfessor: '',
   gruposAbertos: [],   // por padrão, os grupos do menu vêm todos fechados
   menuRecolhido: false,
   versaoDados: '',
@@ -1637,20 +1637,19 @@ function abaProfessor(professor) {
   if (subaba === 'aulas') return navegacao + telaAulas(professor, campos);
 
   // Remarcações: ordenada por data crescente e, dentro do mesmo dia, por horário.
-  // Aula experimental: ordenada só por horário (não por dia da semana, já que aqui
-  // cada linha é um encontro numa data específica). Ambas com filtro de mês;
-  // Remarcações também tem filtro de dia da semana — os dois se combinam (ex.: Agosto + Quinta).
+  // Aula experimental: ordenada por dia da semana e, dentro do dia, por horário
+  // (igual à aba Aulas). Ambas com filtro de mês e de dia da semana — os dois
+  // se combinam (ex.: Agosto + Quinta).
   const temFiltroMes = subaba === 'remarcacoes' || subaba === 'experimental';
-  const temFiltroDia = subaba === 'remarcacoes';
+  const temFiltroDia = subaba === 'remarcacoes' || subaba === 'experimental';
   let linhas = estado.dados[conjunto].filter(x => String(x.professor || '') === professor);
   if (temFiltroMes && estado.mesFiltroProfessor) {
     linhas = linhas.filter(r => mesDoRegistroProfessor(subaba, r) === estado.mesFiltroProfessor);
   }
-  if (temFiltroDia && estado.diaFiltroRemarcacao) {
-    linhas = linhas.filter(r => r.diaSemana === estado.diaFiltroRemarcacao);
+  if (temFiltroDia && estado.diaFiltroProfessor) {
+    linhas = linhas.filter(r => r.diaSemana === estado.diaFiltroProfessor);
   }
   linhas = subaba === 'remarcacoes' ? ordenarPorDataEHorario(linhas, 'data', 'horario')
-    : temFiltroMes ? ordenarPorHorario(linhas, 'horario')
     : ordenarPorDiaEHorario(linhas, 'diaSemana', 'horario');
 
   const filtroMes = temFiltroMes ? `<div class="filtro-dias" style="margin-bottom:14px">
@@ -1659,9 +1658,13 @@ function abaProfessor(professor) {
   </div>` : '';
 
   const filtroDiaSemana = temFiltroDia ? `<div class="filtro-dias" style="margin-bottom:14px">
-    <button class="${estado.diaFiltroRemarcacao === '' ? 'ativo' : ''}" data-acao="filtro-dia-remarcacao" data-dia="">Todos os dias</button>
-    ${DIAS_SEMANA.map(d => `<button class="${estado.diaFiltroRemarcacao === d ? 'ativo' : ''}" data-acao="filtro-dia-remarcacao" data-dia="${esc(d)}">${esc(d)}</button>`).join('')}
+    <button class="${estado.diaFiltroProfessor === '' ? 'ativo' : ''}" data-acao="filtro-dia-professor" data-dia="">Todos os dias</button>
+    ${DIAS_SEMANA.map(d => `<button class="${estado.diaFiltroProfessor === d ? 'ativo' : ''}" data-acao="filtro-dia-professor" data-dia="${esc(d)}">${esc(d)}</button>`).join('')}
   </div>` : '';
+
+  const graficoExperimental = subaba === 'experimental'
+    ? graficoRosca('AULA EXPERIMENTAL', experimentaisPorStatus(estado.dados.experimentais.filter(x => String(x.professor || '') === professor)), { centroRotulo: 'aulas' })
+    : '';
 
   const rotuloNovo = { remarcacoes: '+ Nova remarcação', experimental: '+ Nova aula experimental', dadosAulas: '+ Novo mês', bancoDados: '+ Novo registro' }[subaba];
   // Sugestões para o campo Nome (texto livre) — só existe onde algum campo usa autocompleteAlunos.
@@ -1669,7 +1672,7 @@ function abaProfessor(professor) {
   const listaSugestoesNomes = temCampoAutocomplete
     ? `<datalist id="lista-nomes-alunos-professor">${alunosDoProfessorAtual().map(a => `<option value="${esc(a.nome)}"></option>`).join('')}</datalist>` : '';
 
-  return navegacao + filtroMes + filtroDiaSemana + listaSugestoesNomes + `
+  return navegacao + filtroMes + filtroDiaSemana + graficoExperimental + listaSugestoesNomes + `
     <div class="barra-acoes">
       <button class="botao" data-acao="novo-registro-professor" data-conjunto="${conjunto}" data-subaba="${esc(subaba)}">${esc(rotuloNovo)}</button>
       <span class="espaco"></span>
@@ -2201,7 +2204,7 @@ async function tratarClique(ev) {
   else if (acao === 'subaba-professor') { estado.subaba = alvo.dataset.subaba; desenhar(); }
   else if (acao === 'filtro-dia') { estado.diaFiltro = alvo.dataset.dia; desenhar(); }
   else if (acao === 'filtro-mes-professor') { estado.mesFiltroProfessor = alvo.dataset.mes ? Number(alvo.dataset.mes) : ''; desenhar(); }
-  else if (acao === 'filtro-dia-remarcacao') { estado.diaFiltroRemarcacao = alvo.dataset.dia; desenhar(); }
+  else if (acao === 'filtro-dia-professor') { estado.diaFiltroProfessor = alvo.dataset.dia; desenhar(); }
   else if (acao === 'filtro-dashboard-professor-aulas') { estado.dashboardProfessorAulas = alvo.dataset.professor; desenhar(); }
   else if (acao === 'nova-aula-avulsa') {
     const professor = professorDaAba();
@@ -2217,6 +2220,11 @@ async function tratarClique(ev) {
         alterar('aulas', lista => lista.push({
           id: novoId('au'), professor, alunoId: null, removida: false, ...registro,
         }));
+        // Mesmo ajuste automático que uma edição de "Aula feita" faria — sem isso,
+        // criar a linha já com "Aula feita = Sim" não entraria no gráfico Aulas do mês.
+        if (professor === PROFESSOR_COM_CONTADOR_MENSAL && registro.status !== 'Remarcação' && registro.aulaFeita === 'Sim') {
+          ajustarContagemMensal(professor, 1, 'normal');
+        }
       },
     });
   }
@@ -2238,6 +2246,11 @@ async function tratarClique(ev) {
       valoresIniciais,
       aoSalvar: async registro => {
         alterar(conjunto, lista => lista.push({ id: novoId('r'), professor, ...registro }));
+        // Mesma lógica de "Aula feita" da aba Aulas, aqui para o campo "Ativa" das
+        // remarcações — criar a linha já marcada como Sim tem que somar +1 também.
+        if (conjunto === 'remarcacoes' && professor === PROFESSOR_COM_CONTADOR_MENSAL && registro.ativa === 'Sim') {
+          ajustarContagemMensal(professor, 1, 'remarcacao');
+        }
       },
     });
   }
