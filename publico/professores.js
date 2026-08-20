@@ -1,7 +1,7 @@
 /* ============================================================================
    TELAS DOS PROFESSORES
    Uma tela por professor, com as sub-abas Aulas, Remarcações,
-   Aula experimental (só Olivia) e Dados das Aulas.
+   Aula experimental (só Olivia) e Banco de Dados (só Davi).
    Os dados do aluno vêm do Cadastro de alunos; valores de mensalidade não.
    ========================================================================== */
 
@@ -10,6 +10,9 @@ const SIM_NAO = ['Sim', 'Não'];
 const VERSOES_SCRIPT = ['1.0', '2.0'];
 const PROFESSOR_COM_EXPERIMENTAL = 'Olivia';
 const PROFESSOR_COM_CONTADOR_MENSAL = 'Olivia';
+// Fonte da verdade de N Apresentação/Pag. Slide quando o mesmo nome aparece
+// nas duas telas de professor — ver replicarApresentacaoESlide em app.js.
+const PROFESSOR_ORIGEM_APRESENTACAO = 'Olivia';
 
 const PROFESSOR_COM_BANCO_DADOS = 'Davi';
 
@@ -17,7 +20,6 @@ const SUBABAS_PROFESSOR = [
   { id: 'aulas', rotulo: 'Aulas' },
   { id: 'remarcacoes', rotulo: 'Remarcações' },
   { id: 'experimental', rotulo: 'Aula experimental', apenas: PROFESSOR_COM_EXPERIMENTAL },
-  { id: 'dadosAulas', rotulo: 'Dados das Aulas', apenas: PROFESSOR_COM_BANCO_DADOS },
   { id: 'bancoDados', rotulo: 'Banco de Dados', apenas: PROFESSOR_COM_BANCO_DADOS },
 ];
 
@@ -88,18 +90,6 @@ const CAMPOS_EXPERIMENTAL = [
   { chave: 'qtdAulas', rotulo: 'Qtd Aulas', numero: true, largura: 100 },
 ];
 
-const CAMPOS_DADOS_AULAS = [
-  { chave: 'mes', rotulo: 'Selecionar mês', lista: MESES, largura: 140 },
-  { chave: 'ano', rotulo: 'Ano', numero: true, largura: 90 },
-  { chave: 'bancoHoras', rotulo: 'Banco de horas', numero: true, largura: 125 },
-  { chave: 'mensalidade', rotulo: 'Mensalidade', numero: true, largura: 125 },
-  { chave: 'pago', rotulo: 'Pago', lista: SIM_NAO, largura: 90 },
-  { chave: 'dataRelatorio', rotulo: 'Data relatório', data: true, largura: 145 },
-  { chave: 'relatorioEntregue', rotulo: 'Relatório Entregue', lista: SIM_NAO, largura: 145 },
-  { chave: 'observacao', rotulo: 'Observação', largura: 220 },
-  { chave: 'professor', rotulo: 'Professor(a)', largura: 120 },
-];
-
 /**
  * Banco de Dados (só Davi) — tabela livre, à espera dos dados reais do Excel
  * dele. Enquanto o arquivo não é confirmado, fica com colunas genéricas,
@@ -117,11 +107,11 @@ function camposDaSubaba(subaba, professor) {
   if (subaba === 'aulas') return camposAulaPara(professor);
   return {
     remarcacoes: CAMPOS_REMARCACAO, experimental: CAMPOS_EXPERIMENTAL,
-    dadosAulas: CAMPOS_DADOS_AULAS, bancoDados: CAMPOS_BANCO_DADOS,
+    bancoDados: CAMPOS_BANCO_DADOS,
   }[subaba] || [];
 }
 
-const CONJUNTO_DA_SUBABA = { aulas: 'aulas', remarcacoes: 'remarcacoes', experimental: 'experimentais', dadosAulas: 'dadosAulas', bancoDados: 'bancoDados' };
+const CONJUNTO_DA_SUBABA = { aulas: 'aulas', remarcacoes: 'remarcacoes', experimental: 'experimentais', bancoDados: 'bancoDados' };
 
 /* --------------------------------------------------------- aulas x cadastro
 

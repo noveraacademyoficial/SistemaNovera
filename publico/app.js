@@ -1553,10 +1553,16 @@ const CAMPOS_NUMERICOS_PROFESSOR = ['valor', 'nApresentacao', 'pagSlide', 'qtdAu
  * apenas o aluno do cadastro sendo mostrado. Como cada registro carrega o
  * campo `professor`, uma tela nunca alcança a linha da outra.
  */
+// N Apresentação e Pag. Slide são tratadas como dado do ALUNO, não da linha: quando
+// há nomes iguais na coluna Nome (dentro da mesma tela de professor, ou entre as
+// duas telas), essas duas colunas têm que estar sempre replicadas entre elas.
+const CAMPOS_REPLICADOS_POR_NOME = ['nApresentacao', 'pagSlide'];
+
 function gravarCampoProfessor(conjunto, chave, campo, valor, redesenhar = true) {
   const conteudo = CAMPOS_NUMERICOS_PROFESSOR.includes(campo) ? parseNumero(valor) : valor;
   const professor = professorDaAba();
   let valorAnterior;
+  let nomeDoRegistro;
 
   alterar(conjunto, lista => {
     if (chave.startsWith('aluno:')) {
@@ -1573,13 +1579,28 @@ function gravarCampoProfessor(conjunto, chave, campo, valor, redesenhar = true) 
       }
       valorAnterior = registro[campo];
       registro[campo] = conteudo;
+      nomeDoRegistro = registro.aluno;
     } else {
       // só alcança linhas do professor desta tela
       const registro = lista.find(x => x.id === chave && String(x.professor || '') === professor);
       if (registro) {
         valorAnterior = registro[campo];
         registro[campo] = conteudo;
+        nomeDoRegistro = registro.aluno;
       }
+    }
+
+    // Replica N Apresentação/Pag. Slide para toda linha de mesmo nome: dentro da
+    // mesma tela de professor sempre; e, quando a edição parte da tela da Olivia
+    // (fonte da verdade), também para as linhas da Davi com esse nome — só nesse
+    // sentido, edições do Davi não sobrescrevem a Olivia.
+    const nome = String(nomeDoRegistro || '').trim();
+    if (conjunto === 'aulas' && CAMPOS_REPLICADOS_POR_NOME.includes(campo) && nome) {
+      lista.forEach(l => {
+        if (String(l.aluno || '').trim() !== nome) return;
+        if (l.professor === professor) l[campo] = conteudo;
+        else if (professor === PROFESSOR_ORIGEM_APRESENTACAO && l.professor === 'Davi') l[campo] = conteudo;
+      });
     }
   }, redesenhar);
 
@@ -1666,7 +1687,7 @@ function abaProfessor(professor) {
     ? graficoRosca('AULA EXPERIMENTAL', experimentaisPorStatus(estado.dados.experimentais.filter(x => String(x.professor || '') === professor)), { centroRotulo: 'aulas' })
     : '';
 
-  const rotuloNovo = { remarcacoes: '+ Nova remarcação', experimental: '+ Nova aula experimental', dadosAulas: '+ Novo mês', bancoDados: '+ Novo registro' }[subaba];
+  const rotuloNovo = { remarcacoes: '+ Nova remarcação', experimental: '+ Nova aula experimental', bancoDados: '+ Novo registro' }[subaba];
   // Sugestões para o campo Nome (texto livre) — só existe onde algum campo usa autocompleteAlunos.
   const temCampoAutocomplete = campos.some(c => c.autocompleteAlunos);
   const listaSugestoesNomes = temCampoAutocomplete
@@ -2261,10 +2282,9 @@ async function tratarClique(ev) {
     const valoresIniciais = {
       remarcacoes: { aluno: '', ativa: 'Não', avisou24h: 'Não', data: hojeISO(), diaSemana: '', horario: '', marcacaoOlivia: 'Não', mes: MESES[hoje.getUTCMonth()], observacao: '' },
       experimentais: { aluno: '', data: hojeISO(), diaSemana: '', feito: 'Não', horario: '', level: '', msgAntes: 'Não', msgContatoRecebido: 'Não', qtdAulas: 0, observacao: '' },
-      dadosAulas: { mes: MESES[hoje.getUTCMonth()], ano: hoje.getUTCFullYear(), bancoHoras: 0, mensalidade: 0, pago: 'Não', dataRelatorio: '', relatorioEntregue: 'Não', observacao: '' },
       bancoDados: { titulo: '', categoria: '', data: hojeISO(), valor: 0, observacao: '' },
     }[conjunto] || {};
-    const tituloModal = { remarcacoes: 'Nova remarcação', experimentais: 'Nova aula experimental', dadosAulas: 'Novo mês', bancoDados: 'Novo registro' }[conjunto] || 'Novo registro';
+    const tituloModal = { remarcacoes: 'Nova remarcação', experimentais: 'Nova aula experimental', bancoDados: 'Novo registro' }[conjunto] || 'Novo registro';
     await abrirModalNovoRegistro({
       titulo: tituloModal,
       campos: camposDaSubaba(subaba, professor),
@@ -2284,7 +2304,7 @@ async function tratarClique(ev) {
     const professor = professorDaAba();
     const registro = estado.dados[conjunto].find(x => x.id === alvo.dataset.id);
     const ok = await confirmarExclusao('Excluir registro',
-      `Você está excluindo este registro de <strong>${esc({ remarcacoes: 'remarcação', experimentais: 'aula experimental', dadosAulas: 'dados das aulas' }[conjunto] || 'registro')}</strong>` +
+      `Você está excluindo este registro de <strong>${esc({ remarcacoes: 'remarcação', experimentais: 'aula experimental' }[conjunto] || 'registro')}</strong>` +
       `${registro && registro.aluno ? ' de <strong>' + esc(registro.aluno) + '</strong>' : ''}.<br>Esta ação não pode ser desfeita pelo sistema.`);
     if (!ok) return;
     alterar(conjunto, lista => {

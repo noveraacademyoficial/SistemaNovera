@@ -58,19 +58,31 @@ Uma tela por professor, com sub-abas:
 | **Aulas** | sim | sim |
 | **Remarcações** | sim | sim |
 | **Aula experimental** | — | sim |
-| **Dados das Aulas** | sim | — |
 | **Banco de Dados** | sim | — |
 
-**As duas telas são independentes.** Cada professor tem a própria lista, guardada com
-o nome dele em cada linha; editar em uma tela nunca alcança a outra, e nada do que se
-faz aqui altera o Cadastro de alunos ou o financeiro. Quando a Olivia grava, o servidor
-preserva as linhas do Davi, e vice-versa — inclusive quando as duas telas são usadas ao
-mesmo tempo, em computadores diferentes.
+**As duas telas são independentes**, com uma exceção (ver abaixo). Cada professor tem a
+própria lista, guardada com o nome dele em cada linha; editar em uma tela nunca alcança
+a outra, e nada do que se faz aqui altera o Cadastro de alunos ou o financeiro. Quando
+a Olivia grava, o servidor preserva as linhas do Davi, e vice-versa — inclusive quando
+as duas telas são usadas ao mesmo tempo, em computadores diferentes.
 
 **Aulas** — **todas as colunas são editáveis**: Nomes, Level, Dia, Horário, Status,
 Observação, N Apresentação, Pag. Slide, Script Feito, Script Modelo, Aula feita — e,
 só para o Davi, também **Qtd. Aula** e **Valor Mês Seguinte**. **Valores de mensalidade
 não aparecem aqui.**
+
+- **N Apresentação e Pag. Slide são a exceção à independência das telas** — são
+  tratadas como um dado **do aluno**, não da linha ou da tela: sempre que duas ou mais
+  linhas têm o **mesmo nome** na coluna Nomes, essas duas colunas ficam **replicadas**
+  entre elas. Isso vale em três situações, todas automáticas (sem pedir senha, é só o
+  reflexo de uma edição que o(a) próprio(a) professor(a) já pode fazer):
+  - **Nomes iguais na mesma tela** (Davi ou Olivia): editar N Apresentação ou Pag. Slide
+    numa linha copia o valor para toda outra linha da mesma tela com esse nome.
+  - **O mesmo nome nas duas telas**: quando a edição é feita na tela da **Olivia**, o
+    valor também é copiado para a(s) linha(s) da tela do **Davi** com esse nome — a
+    Olivia é a fonte da verdade para essas duas colunas entre os dois professores.
+  - **A via contrária não existe**: editar essas colunas na tela do Davi só replica
+    para outras linhas do próprio Davi com o mesmo nome — não altera a tela da Olivia.
 
 - **Status** agora é a mesma lista da aba *Listas e opções* (não uma lista fixa
   separada): editar as opções lá atualiza as duas telas de professor e o Cadastro de
@@ -127,11 +139,9 @@ distribuição de todas as aulas experimentais da Olivia pelo campo Feito
 o mesmo gráfico que já aparecia copiado na Visão Geral do Davi, agora também
 na tela dela.
 
-**Dados das Aulas** (só Davi) — um registro por mês: mês, ano, banco de horas,
-mensalidade, pago, data do relatório, relatório entregue, observação e
-professor(a). Essa aba saiu da tela da Olivia (os registros dela continuam
-guardados em `dados\dadosAulas.json`, só não aparecem mais em nenhuma tela —
-me avise se quiser que eles voltem a aparecer em algum lugar).
+**Dados das Aulas** saiu das duas telas (primeiro da Olivia, agora também do Davi).
+Os registros continuam guardados no banco (tabela `dados_aulas`), só não aparecem
+mais em nenhuma tela — me avise se quiser que eles voltem a aparecer em algum lugar.
 
 **Banco de Dados** (só Davi) — aba nova, ainda **provisória**: como eu não tinha a
 planilha exata que deveria alimentá-la, ela veio com colunas genéricas (Título,
@@ -216,10 +226,6 @@ O gráfico "Aulas do mês" aparece copiado na **Visão Geral** (ver abaixo), jun
 versão só para o Davi. O KPI "Aulas marcadas como feitas" saiu da tela da Olivia
 (o gráfico acima já cobre essa informação de um jeito mais útil); ele continua
 existindo na tela do Davi, sem mudança.
-
-> Sobre o campo **Mensalidade** em *Dados das Aulas*: entendi como a remuneração do
-> professor no mês, não a mensalidade do aluno — é o único lugar do sistema onde um
-> professor vê um valor, e ele é o dele. Se a intenção era outra, me diga.
 
 ---
 
