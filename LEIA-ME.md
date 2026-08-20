@@ -199,6 +199,15 @@ aulas experimentais: uma barra por dia da semana, contando só as do **mês atua
 (mês lido a partir da Data, já que a aba Aula experimental não tem um campo "Mês"
 pronto) — mesma lógica de "Remarcações por dia", sem somar o histórico inteiro.
 
+Os dois gráficos acompanham o filtro de **dia da semana** desta mesma tela (o botão
+"Segunda/Terça/…" que já filtra a lista de alunos abaixo): sem filtro, cada um soma
+o mês inteiro por dia da semana, como descrito acima; com um dia escolhido (ex.:
+Sexta), em vez de somar **todas** as sextas do mês, o gráfico passa a mostrar só a
+**data exata da próxima sexta** — o título muda para "REMARCAÇÕES — PRÓXIMA SEXTA
+(dd/mm/aaaa)" (e o mesmo para o de aula experimental) para deixar claro que não é
+mais uma soma do mês. Se hoje já é o dia escolhido, a "próxima" ocorrência é o
+próprio dia de hoje.
+
 O gráfico "Aulas do mês" aparece copiado na **Visão Geral** (ver abaixo), junto com uma
 versão só para o Davi. O KPI "Aulas marcadas como feitas" saiu da tela da Olivia
 (o gráfico acima já cobre essa informação de um jeito mais útil); ele continua

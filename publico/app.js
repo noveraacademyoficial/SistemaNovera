@@ -1722,14 +1722,32 @@ function telaAulas(professor, campos) {
   const hojeAulas = paraData(estado.calc.hoje);
   const mesAtualNome = MESES[hojeAulas.getUTCMonth()];
   const mesAtualNumero = hojeAulas.getUTCMonth() + 1;
-  const remarcacoesDoMesAtual = comContadorMensal
-    ? estado.dados.remarcacoes.filter(r => String(r.professor || '') === professor && r.mes === mesAtualNome) : [];
+
+  // Os dois gráficos "por dia" abaixo acompanham o filtro de dia da semana desta
+  // mesma tela (o mesmo botão "Segunda/Terça/..." que filtra a tabela de alunos):
+  // sem filtro, cada um soma o mês inteiro por dia da semana; com um dia
+  // escolhido, em vez de somar TODAS as ocorrências daquele dia no mês, mostra
+  // só a data exata da próxima ocorrência (ex.: filtro "Sexta" = só a sexta
+  // que vem, não todas as sextas do mês).
+  const dataAlvoFiltro = estado.diaFiltro ? proximaDataParaDia(estado.diaFiltro, hojeAulas) : null;
+
+  const remarcacoesDoProfessor = comContadorMensal
+    ? estado.dados.remarcacoes.filter(r => String(r.professor || '') === professor) : [];
+  const remarcacoesDoGrafico = dataAlvoFiltro
+    ? remarcacoesDoProfessor.filter(r => r.data === dataAlvoFiltro)
+    : remarcacoesDoProfessor.filter(r => r.mes === mesAtualNome);
+  const tituloRemarcacoes = dataAlvoFiltro ? `REMARCAÇÕES — PRÓXIMA ${estado.diaFiltro.toUpperCase()} (${dataBR(dataAlvoFiltro)})` : 'REMARCAÇÕES POR DIA';
   const graficoRemarcacoes = comContadorMensal
-    ? graficoColunas('REMARCAÇÕES POR DIA', remarcacoesPorDia(remarcacoesDoMesAtual), { cor: 'var(--amarelo)' }) : '';
-  const experimentaisDoMesAtual = comContadorMensal
-    ? estado.dados.experimentais.filter(r => String(r.professor || '') === professor && mesDoRegistroProfessor('experimental', r) === mesAtualNumero) : [];
+    ? graficoColunas(tituloRemarcacoes, remarcacoesPorDia(remarcacoesDoGrafico), { cor: 'var(--amarelo)' }) : '';
+
+  const experimentaisDoProfessor = comContadorMensal
+    ? estado.dados.experimentais.filter(r => String(r.professor || '') === professor) : [];
+  const experimentaisDoGrafico = dataAlvoFiltro
+    ? experimentaisDoProfessor.filter(r => r.data === dataAlvoFiltro)
+    : experimentaisDoProfessor.filter(r => mesDoRegistroProfessor('experimental', r) === mesAtualNumero);
+  const tituloExperimental = dataAlvoFiltro ? `AULA EXPERIMENTAL — PRÓXIMA ${estado.diaFiltro.toUpperCase()} (${dataBR(dataAlvoFiltro)})` : 'AULA EXPERIMENTAL POR DIA';
   const graficoExperimentalPorDia = comContadorMensal
-    ? graficoColunas('AULA EXPERIMENTAL POR DIA', experimentaisPorDia(experimentaisDoMesAtual), { cor: 'var(--azul)' }) : '';
+    ? graficoColunas(tituloExperimental, experimentaisPorDia(experimentaisDoGrafico), { cor: 'var(--azul)' }) : '';
 
   return `
     ${filtroDias}

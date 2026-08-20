@@ -140,6 +140,22 @@ function minutosDoHorario(texto) {
   const m = /^(\d{1,2}):(\d{2})/.exec(String(texto || '').trim());
   return m ? Number(m[1]) * 60 + Number(m[2]) : 9999;
 }
+/**
+ * Data (aaaa-mm-dd) da próxima ocorrência de um dia da semana a partir de
+ * "hoje" (inclusive — se hoje já é o dia pedido, a "próxima" é hoje mesmo).
+ * Usada pelos gráficos "Remarcações por dia" e "Aula experimental por dia"
+ * quando o filtro de dia da semana da aba Aulas está ativo: nesse caso eles
+ * somam só essa data específica, não o mês inteiro daquele dia da semana.
+ */
+function proximaDataParaDia(diaSemana, hoje) {
+  const alvoIdx = DIAS_SEMANA.indexOf(diaSemana);
+  if (alvoIdx < 0 || !hoje) return null;
+  const hojeIdx = (hoje.getUTCDay() + 6) % 7; // getUTCDay: 0=domingo → converte para 0=segunda
+  const diff = (alvoIdx - hojeIdx + 7) % 7;
+  const alvo = new Date(hoje);
+  alvo.setUTCDate(hoje.getUTCDate() + diff);
+  return paraISO(alvo);
+}
 /** Ordena do primeiro dia da semana para o último e, dentro do dia, pelo horário. */
 function ordenarPorDiaEHorario(lista, campoDia = 'dia', campoHora = 'horario') {
   return lista.slice().sort((a, b) =>
