@@ -177,6 +177,9 @@ próprio Davi:
 Logo abaixo, a aba Aulas da Olivia também ganhou o gráfico **"Remarcações por dia"**,
 contando quantas remarcações existem em cada dia da semana (campo "Dia da semana"
 da aba Remarcações) — para visualizar rapidamente onde as remarcações se concentram.
+A contagem é sempre restrita ao **mês atual** (campo "Mês" da linha de remarcação):
+o gráfico não soma o histórico inteiro, só o mês corrente — passa a virar do zero
+quando o mês vira.
 
 O gráfico "Aulas do mês" aparece copiado na **Visão Geral** (ver abaixo), junto com uma
 versão só para o Davi. O KPI "Aulas marcadas como feitas" saiu da tela da Olivia

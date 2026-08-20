@@ -1716,10 +1716,11 @@ function telaAulas(professor, campos) {
 
   const comContadorMensal = professor === PROFESSOR_COM_CONTADOR_MENSAL;
   const graficoMensal = comContadorMensal ? graficoAulasMensais(professor) : '';
-  const remarcacoesDoProfessor = comContadorMensal
-    ? estado.dados.remarcacoes.filter(r => String(r.professor || '') === professor) : [];
+  const mesAtualNome = MESES[paraData(estado.calc.hoje).getUTCMonth()];
+  const remarcacoesDoMesAtual = comContadorMensal
+    ? estado.dados.remarcacoes.filter(r => String(r.professor || '') === professor && r.mes === mesAtualNome) : [];
   const graficoRemarcacoes = comContadorMensal
-    ? graficoColunas('REMARCAÇÕES POR DIA', remarcacoesPorDia(remarcacoesDoProfessor), { cor: 'var(--amarelo)' }) : '';
+    ? graficoColunas('REMARCAÇÕES POR DIA', remarcacoesPorDia(remarcacoesDoMesAtual), { cor: 'var(--amarelo)' }) : '';
 
   return `
     ${filtroDias}
