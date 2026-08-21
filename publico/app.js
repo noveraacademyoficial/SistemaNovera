@@ -1390,6 +1390,8 @@ function abaRelatorios() {
           ${seletor('ano', 'Ano', anosDisponiveis(estado.calc.pagamentosCalc), 'Todos')}
           <label class="filtro"><span>De</span><input type="date" data-acao="filtro-relatorio" data-campo="de" value="${esc(filtros.de)}"></label>
           <label class="filtro"><span>Até</span><input type="date" data-acao="filtro-relatorio" data-campo="ate" value="${esc(filtros.ate)}"></label>
+          <label class="filtro"><span>Matriculado de</span><input type="date" data-acao="filtro-relatorio" data-campo="matriculaDe" value="${esc(filtros.matriculaDe)}"></label>
+          <label class="filtro"><span>Matriculado até</span><input type="date" data-acao="filtro-relatorio" data-campo="matriculaAte" value="${esc(filtros.matriculaAte)}"></label>
           ${seletor('aluno', 'Aluno', nomesAlunos, 'Todos')}
           ${seletor('professor', 'Professor', estado.dados.opcoes.professores || [], 'Todos')}
           ${seletor('situacao', 'Situação', SITUACOES_RELATORIO, 'Todas')}

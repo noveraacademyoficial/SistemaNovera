@@ -122,6 +122,9 @@ function calcularPagamento(pagamento, indiceAlunos, hoje) {
     dataVencimento: vencimento ? paraISO(vencimento) : '',
     diasAtraso,
     situacao,
+    // Data Matrícula do Cadastro de alunos, carregada aqui só para o filtro de
+    // "matriculado de/até" da tela Relatórios — não é um campo do pagamento em si.
+    dataMatricula: aluno ? (aluno.dataMatricula || '') : '',
   };
 }
 

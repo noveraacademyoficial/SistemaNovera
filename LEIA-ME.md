@@ -550,6 +550,13 @@ Uma barra de filtros no topo vale para todos os relatórios:
   *Competência* ou *Vencimento*. É o filtro mais importante: o mesmo lançamento
   cai em meses diferentes conforme a data usada.
 - **Ano**, **De** e **Até** — período sobre a data de referência escolhida
+- **Matriculado de** e **Matriculado até** — filtra pelo **histórico de quando o
+  aluno entrou**, usando a coluna **Data Matrícula** do Cadastro de alunos. É
+  independente da Data de referência acima: aquela é sobre a data do
+  pagamento/competência/vencimento, esta é sobre a data em que o aluno se
+  matriculou — dá para, por exemplo, ver só os lançamentos de alunos que
+  entraram a partir de janeiro de 2026. Lançamentos de um aluno sem Data
+  Matrícula preenchida ficam de fora quando esse filtro está ativo.
 - **Aluno**, **Professor**, **Situação**, **Tipo**, **Forma**
 - **Valor mínimo** e **máximo**
 

@@ -26,6 +26,7 @@ const FILTROS_PADRAO = {
   de: '', ate: '', ano: '',
   aluno: '', professor: '', situacao: '', tipo: '', forma: '',
   valorMin: '', valorMax: '',
+  matriculaDe: '', matriculaAte: '',
 };
 
 /* ------------------------------------------------------------------ filtro */
@@ -42,6 +43,13 @@ function aplicarFiltros(pagamentos, filtros) {
     if (f.ano && referencia.slice(0, 4) !== f.ano) return false;
     if (f.de && (!referencia || referencia < f.de)) return false;
     if (f.ate && (!referencia || referencia > f.ate)) return false;
+
+    // Filtra pelo histórico de quando o aluno entrou (Data Matrícula do Cadastro
+    // de alunos) — independente da "Data de referência" escolhida acima, que é
+    // sobre o pagamento (data do pagamento/competência/vencimento), não sobre
+    // quando o aluno se matriculou.
+    if (f.matriculaDe && (!p.dataMatricula || p.dataMatricula < f.matriculaDe)) return false;
+    if (f.matriculaAte && (!p.dataMatricula || p.dataMatricula > f.matriculaAte)) return false;
 
     if (f.aluno && String(p.aluno || '') !== f.aluno) return false;
     if (f.professor && String(p.professor || '') !== f.professor) return false;
