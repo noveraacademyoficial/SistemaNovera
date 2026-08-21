@@ -1280,6 +1280,7 @@ function colunasDoRelatorio(tipo) {
 
     inadimplencia: [
       { rotulo: 'Aluno', valor: l => `${esc(l.nome)}${atrasaSempre(l) ? ' <span class="selo-atraso">atrasa sempre</span>' : ''}`, csv: l => l.nome },
+      { rotulo: 'Data Matrícula', valor: l => esc(dataBR(l.dataMatricula) || '—'), csv: l => dataBR(l.dataMatricula) },
       { rotulo: 'Professor', valor: l => esc(l.professor || '—'), csv: l => l.professor || '' },
       { rotulo: 'Cobranças', num: true, valor: l => inteiro(l.lancamentos), csv: l => l.lancamentos },
       { rotulo: 'Vezes que atrasou', num: true, valor: l => inteiro(l.vezesAtrasou), csv: l => l.vezesAtrasou },
@@ -1390,8 +1391,6 @@ function abaRelatorios() {
           ${seletor('ano', 'Ano', anosDisponiveis(estado.calc.pagamentosCalc), 'Todos')}
           <label class="filtro"><span>De</span><input type="date" data-acao="filtro-relatorio" data-campo="de" value="${esc(filtros.de)}"></label>
           <label class="filtro"><span>Até</span><input type="date" data-acao="filtro-relatorio" data-campo="ate" value="${esc(filtros.ate)}"></label>
-          <label class="filtro"><span>Matriculado de</span><input type="date" data-acao="filtro-relatorio" data-campo="matriculaDe" value="${esc(filtros.matriculaDe)}"></label>
-          <label class="filtro"><span>Matriculado até</span><input type="date" data-acao="filtro-relatorio" data-campo="matriculaAte" value="${esc(filtros.matriculaAte)}"></label>
           ${seletor('aluno', 'Aluno', nomesAlunos, 'Todos')}
           ${seletor('professor', 'Professor', estado.dados.opcoes.professores || [], 'Todos')}
           ${seletor('situacao', 'Situação', SITUACOES_RELATORIO, 'Todas')}
