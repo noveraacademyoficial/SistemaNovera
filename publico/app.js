@@ -22,6 +22,7 @@ const estado = {
   menuRecolhido: false,
   versaoDados: '',
   dashboardProfessorAulas: 'Olivia',
+  logOlivia: null,   // carregado sob demanda ao abrir "Listas e opções" — ver carregarLogOlivia
 };
 
 const ABAS_PROFESSOR = [
@@ -1621,6 +1622,44 @@ function gravarCampoProfessor(conjunto, chave, campo, valor, redesenhar = true) 
     const ficouAtiva = conteudo === 'Sim';
     if (eraAtiva !== ficouAtiva) ajustarContagemMensal(professor, ficouAtiva ? 1 : -1, 'remarcacao');
   }
+
+  // Log Profa. Olivia (Listas e opções): toda edição de verdade (valor mudou) nas
+  // três abas dela fica registrada, com quem fez e quando — ver registrarLogAtividade.
+  if (professor === 'Olivia' && CONJUNTOS_COM_LOG.includes(conjunto) && valorAnterior !== conteudo) {
+    registrarLogAtividade(professor, conjunto, 'editar', nomeDoRegistro, campo, valorAnterior, conteudo);
+  }
+}
+
+/** Conjuntos das telas de professor cobertos pelo "Log Profa. Olivia". */
+const CONJUNTOS_COM_LOG = ['aulas', 'remarcacoes', 'experimentais'];
+
+/** Nome de exibição de um campo técnico ("nApresentacao" → "N Apresentação") para o log. */
+function rotuloDoCampoLog(conjunto, campo) {
+  const listas = { aulas: camposAulaPara('Olivia'), remarcacoes: CAMPOS_REMARCACAO, experimentais: CAMPOS_EXPERIMENTAL };
+  const achado = (listas[conjunto] || []).find(c => c.chave === campo);
+  return achado ? achado.rotulo : campo;
+}
+
+/**
+ * Registra uma linha no "Log Profa. Olivia" (Listas e opções). Sempre em
+ * segundo plano — se a chamada falhar, a edição do professor não trava por
+ * causa disso; o log fica incompleto, mas o sistema continua funcionando.
+ */
+async function registrarLogAtividade(professor, conjunto, acao, aluno, campo, valorAnterior, valorNovo) {
+  try {
+    await fetch('/api/log', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        professor, conjunto, acao,
+        aluno: aluno || '',
+        campo: campo ? rotuloDoCampoLog(conjunto, campo) : null,
+        valorAnterior: (valorAnterior === undefined || valorAnterior === null) ? '' : String(valorAnterior),
+        valorNovo: (valorNovo === undefined || valorNovo === null) ? '' : String(valorNovo),
+      }),
+    });
+  } catch (e) {
+    // silencioso: ver comentário acima
+  }
 }
 
 async function ajustarContagemMensal(professor, delta, origem) {
@@ -1947,7 +1986,58 @@ function abaListas() {
         </div>
       </section>`).join('')}
   </div>
-  <p class="legenda">Estas listas reproduzem a aba <strong>Início</strong> da planilha. Todas são pretas: podem ser editadas, incluídas e excluídas.</p>`;
+  <p class="legenda">Estas listas reproduzem a aba <strong>Início</strong> da planilha. Todas são pretas: podem ser editadas, incluídas e excluídas.</p>
+  ${logOliviaHtml()}`;
+}
+
+/** Carrega (ou recarrega) o "Log Profa. Olivia" ao abrir a aba Listas e opções. */
+async function carregarLogOlivia() {
+  try {
+    const r = await fetch('/api/log?professor=Olivia');
+    if (!r.ok) return;
+    const dados = await r.json();
+    estado.logOlivia = dados.linhas || [];
+    desenhar();
+  } catch (e) {
+    // silencioso: a tela fica mostrando "Carregando…" se a busca falhar
+  }
+}
+
+const ROTULO_ACAO_LOG = { criar: 'Criou', editar: 'Editou', excluir: 'Excluiu' };
+const ROTULO_CONJUNTO_LOG = { aulas: 'Aulas', remarcacoes: 'Remarcações', experimentais: 'Aula experimental' };
+
+/**
+ * "Log Profa. Olivia" — toda criação, edição e exclusão de linha nas três
+ * abas dela, com data/hora e quem fez (inclusive quando é o Davi, navegando
+ * na tela dela). Carregado sob demanda (ver carregarLogOlivia); fica com
+ * "Carregando…" na primeira renderização até a busca voltar.
+ */
+function logOliviaHtml() {
+  const linhas = estado.logOlivia;
+  const carregando = linhas === null;
+  return `<section class="cartao" style="margin-top:20px">
+    <header>LOG PROFA. OLIVIA${carregando ? '' : ` — ${inteiro(linhas.length)} REGISTRO(S)`}</header>
+    <div class="corpo sem-espaco"><div class="rolagem"><table>
+      <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Aba</th><th>Aluno</th><th>Campo</th><th>De</th><th>Para</th></tr></thead>
+      <tbody>
+        ${carregando ? `<tr><td colspan="8" class="vazio">Carregando…</td></tr>`
+          : linhas.length ? linhas.map(l => `<tr>
+              <td>${esc(dataHoraBR(l.quando))}</td>
+              <td>${esc(l.nomeUsuario || l.usuario || '—')}</td>
+              <td>${esc(ROTULO_ACAO_LOG[l.acao] || l.acao)}</td>
+              <td>${esc(ROTULO_CONJUNTO_LOG[l.conjunto] || l.conjunto)}</td>
+              <td>${esc(l.aluno || '—')}</td>
+              <td>${esc(l.campo || '—')}</td>
+              <td>${esc(l.valorAnterior || '—')}</td>
+              <td>${esc(l.valorNovo || '—')}</td>
+            </tr>`).join('')
+          : `<tr><td colspan="8" class="vazio">Nenhum registro ainda.</td></tr>`}
+      </tbody>
+    </table></div></div>
+  </section>
+  <p class="legenda">Toda criação, edição e exclusão de linha nas abas Aulas, Remarcações e Aula experimental da
+    Olivia fica registrada aqui — inclusive quando quem edita é o Davi, navegando na tela dela. Mostra os 500
+    registros mais recentes.</p>`;
 }
 
 /* ------------------------------------------------- navegação das tabelas largas
@@ -2095,7 +2185,12 @@ async function tratarClique(ev) {
   if (ev.target.closest('#voltar')) { estado.aba = 'dashboard'; estado.busca = ''; desenhar(); return; }
 
   const botaoAba = ev.target.closest('[data-aba]');
-  if (botaoAba) { estado.aba = botaoAba.dataset.aba; estado.busca = ''; desenhar(); return; }
+  if (botaoAba) {
+    estado.aba = botaoAba.dataset.aba; estado.busca = '';
+    if (estado.aba === 'listas') carregarLogOlivia();
+    desenhar();
+    return;
+  }
 
   const alvo = ev.target.closest('[data-acao]');
   if (!alvo) return;
@@ -2272,6 +2367,7 @@ async function tratarClique(ev) {
         if (professor === PROFESSOR_COM_CONTADOR_MENSAL && registro.status !== 'Remarcação' && registro.aulaFeita === 'Sim') {
           ajustarContagemMensal(professor, 1, 'normal');
         }
+        if (professor === 'Olivia') registrarLogAtividade(professor, 'aulas', 'criar', registro.aluno, null, null, null);
       },
     });
   }
@@ -2297,6 +2393,9 @@ async function tratarClique(ev) {
         if (conjunto === 'remarcacoes' && professor === PROFESSOR_COM_CONTADOR_MENSAL && registro.ativa === 'Sim') {
           ajustarContagemMensal(professor, 1, 'remarcacao');
         }
+        if (professor === 'Olivia' && CONJUNTOS_COM_LOG.includes(conjunto)) {
+          registrarLogAtividade(professor, conjunto, 'criar', registro.aluno, null, null, null);
+        }
       },
     });
   }
@@ -2318,6 +2417,9 @@ async function tratarClique(ev) {
     // são calculados ao vivo a partir da lista e já refletem a exclusão sozinhos).
     if (conjunto === 'remarcacoes' && professor === PROFESSOR_COM_CONTADOR_MENSAL && registro && registro.ativa === 'Sim') {
       ajustarContagemMensal(professor, -1, 'remarcacao');
+    }
+    if (professor === 'Olivia' && CONJUNTOS_COM_LOG.includes(conjunto)) {
+      registrarLogAtividade(professor, conjunto, 'excluir', registro && registro.aluno, null, null, null);
     }
   }
   else if (acao === 'remover-aluno-professor') {
@@ -2344,6 +2446,7 @@ async function tratarClique(ev) {
         if (registro) registro.removida = true;
       }
     });
+    if (professor === 'Olivia') registrarLogAtividade(professor, 'aulas', 'excluir', linha && linha.aluno, null, null, null);
   }
   else if (acao === 'editar-contagem-mensal') {
     await editarContagemMensal(alvo.dataset.professor);

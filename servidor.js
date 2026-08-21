@@ -339,6 +339,45 @@ async function tratarRequisicao(req, res) {
         return responderJson(res, 200, { ok: true, registro });
       }
 
+      /**
+       * Log de atividades da tela de professor (por ora só a da Olivia usa
+       * isso). Não pede senha — é só o reflexo automático de uma ação que o
+       * próprio professor (ou o Davi, navegando na tela dela) já tem
+       * permissão de fazer. "criado_em" nunca vem do corpo da requisição:
+       * é sempre o relógio do banco, pra não dar pra forjar data/hora.
+       */
+      if (rota === '/api/log' && req.method === 'POST') {
+        const corpo = await lerCorpo(req) || {};
+        const conjuntosValidos = ['aulas', 'remarcacoes', 'experimentais'];
+        const acoesValidas = ['criar', 'editar', 'excluir'];
+        if (!conjuntosValidos.includes(corpo.conjunto) || !acoesValidas.includes(corpo.acao)) {
+          return responderJson(res, 400, { erro: 'conjunto/ação inválidos.' });
+        }
+        const professorAlvo = ehAdmin(conta) && corpo.professor ? corpo.professor : conta.professor;
+        if (!professorAlvo) return responderJson(res, 400, { erro: 'Professor não identificado.' });
+        const texto = (v, max) => v === null || v === undefined ? null : String(v).slice(0, max);
+        await banco.registrarLog({
+          professor: professorAlvo,
+          conjunto: corpo.conjunto,
+          acao: corpo.acao,
+          aluno: texto(corpo.aluno, 200),
+          campo: texto(corpo.campo, 60),
+          valorAnterior: texto(corpo.valorAnterior, 300),
+          valorNovo: texto(corpo.valorNovo, 300),
+          usuario: conta.usuario,
+          nomeUsuario: conta.nome,
+        });
+        return responderJson(res, 200, { ok: true });
+      }
+
+      /** Lista o log de atividades de um professor — só o Davi enxerga essa tela. */
+      if (rota === '/api/log' && req.method === 'GET') {
+        if (!ehAdmin(conta)) return responderJson(res, 403, { erro: 'Seu acesso não permite ver o log.' });
+        const professor = url.searchParams.get('professor') || 'Olivia';
+        const linhas = await banco.listarLog(professor);
+        return responderJson(res, 200, { linhas });
+      }
+
       if (rota.startsWith('/api/dados/') && req.method === 'PUT') {
         const chave = rota.replace('/api/dados/', '');
         if (!ARQUIVOS[chave]) return responderJson(res, 404, { erro: 'Conjunto desconhecido: ' + chave });

@@ -251,6 +251,8 @@ Sistema Financeiro\
 ├─ deploy\                              scripts de publicação e o schema do banco
 │  ├─ schema.sql                        schema original (Supabase SQL Editor)
 │  ├─ schema-vercel.sql                 tabelas de sessão/login para rodar na Vercel
+│  ├─ schema-rls.sql                    Row Level Security (só service_role lê/grava)
+│  ├─ schema-log.sql                    tabela log_atividades ("Log Profa. Olivia")
 │  ├─ schema-correcao-*.sql             correções aplicadas depois (histórico)
 │  └─ migrar-para-supabase.js           script que moveu dados\*.json pro banco
 ├─ dados\                               >>> BACKUP HISTÓRICO, não é mais a fonte ativa <<<
@@ -259,8 +261,8 @@ Sistema Financeiro\
 ```
 
 **Tabelas no Supabase**: `usuarios`, `alunos`, `aulas`, `pagamentos`,
-`remarcacoes`, `experimentais`, `dados_aulas`, `contagem_aulas`, `banco_dados`
-— uma linha por registro. `financeiro2026`, `financeiro2027`,
+`remarcacoes`, `experimentais`, `dados_aulas`, `contagem_aulas`, `banco_dados`,
+`log_atividades` — uma linha por registro. `financeiro2026`, `financeiro2027`,
 `conta_pessoal_2026` e `opcoes` ficam como documento (JSONB) numa tabela
 `configuracoes`, porque são a réplica das fórmulas do Excel (arrays de 12
 meses, premissas) — não fazem sentido virar linha de tabela.
@@ -539,6 +541,15 @@ entram na projeção. O restante é derivado de 2026, como na planilha.
 
 **Listas e opções** — reproduz a aba *Início*: planos, status, tipos de recebimento,
 formas de pagamento e professores. Incluir aqui já atualiza todas as caixas de seleção.
+
+Nessa mesma tela, mais embaixo, fica o **"Log Profa. Olivia"** — só o Davi enxerga.
+Toda criação, edição (só quando o valor realmente muda) e exclusão de linha nas três
+abas da Olivia (Aulas, Remarcações, Aula experimental) fica registrada ali, com
+**data/hora** (do relógio do servidor, nunca do navegador — não dá pra forjar) e
+**quem fez** — inclusive quando é o Davi editando a tela dela, não só quando é ela
+mesma. A tabela mostra Quando, Quem, Ação (Criou/Editou/Excluiu), Aba, Aluno, Campo
+e os valores De → Para (só preenchidos numa edição). Mostra os 500 registros mais
+recentes; é só de consulta, ninguém edita ou apaga uma linha do log pela tela.
 
 ---
 

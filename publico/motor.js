@@ -481,6 +481,13 @@ function dataBR(iso) {
   const p = String(iso).slice(0, 10).split('-');
   return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(iso);
 }
+/** Data e hora (timestamp completo, ex.: "2026-08-21T14:32:10.123Z") no horário local do navegador. */
+function dataHoraBR(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 function competenciaBR(iso) {
   const d = paraData(iso);
   return d ? `${MESES_CURTOS[d.getUTCMonth()]}/${String(d.getUTCFullYear()).slice(2)}` : '';

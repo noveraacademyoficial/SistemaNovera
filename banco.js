@@ -232,9 +232,45 @@ async function limparTentativas(ip) {
   if (error) throw new Error('Falha ao limpar tentativas: ' + error.message);
 }
 
+/* ---------------------------------------------- log de atividades (Olivia)
+   Registro de toda criação/edição/exclusão feita nas telas de professor —
+   por ora só a da Olivia usa isso (ver "Log Profa. Olivia" em Listas e
+   opções). Tabela só de inserção; "criado_em" vem sempre do relógio do
+   banco (default now()), nunca de um valor mandado pelo navegador.        */
+
+async function registrarLog(entrada) {
+  const linha = {
+    id: 'log_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    professor: entrada.professor,
+    conjunto: entrada.conjunto,
+    acao: entrada.acao,
+    aluno: entrada.aluno || null,
+    campo: entrada.campo || null,
+    valor_anterior: entrada.valorAnterior === undefined ? null : entrada.valorAnterior,
+    valor_novo: entrada.valorNovo === undefined ? null : entrada.valorNovo,
+    usuario: entrada.usuario,
+    nome_usuario: entrada.nomeUsuario || null,
+  };
+  const { error } = await supabase.from('log_atividades').insert(linha);
+  if (error) throw new Error('Falha ao registrar log: ' + error.message);
+}
+
+async function listarLog(professor, limite = 500) {
+  const { data, error } = await supabase.from('log_atividades')
+    .select('*').eq('professor', professor)
+    .order('criado_em', { ascending: false }).limit(limite);
+  if (error) throw new Error('Falha ao listar log: ' + error.message);
+  return (data || []).map(l => ({
+    id: l.id, professor: l.professor, conjunto: l.conjunto, acao: l.acao,
+    aluno: l.aluno, campo: l.campo, valorAnterior: l.valor_anterior, valorNovo: l.valor_novo,
+    usuario: l.usuario, nomeUsuario: l.nome_usuario, quando: l.criado_em,
+  }));
+}
+
 module.exports = {
   supabase, lerConjunto, gravarConjunto, versaoAtual, bump,
   buscarConta, gravarConta, contarContas,
   criarSessao, sessaoDoToken, destruirSessao, DURACAO_SESSAO,
   loginBloqueado, registrarTentativaFalha, limparTentativas,
+  registrarLog, listarLog,
 };
